@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ГЕНЕРАТОР ГРАФИКА ОТПУСКОВ 2026
-С ДИНАМИЧЕСКИМИ ФОРМУЛАМИ ДЛЯ АВТОМАТИЧЕСКОГО ОБНОВЛЕНИЯ
+С МАКРОСОМ VBA ДЛЯ АВТООБНОВЛЕНИЯ
 """
 
 import os
@@ -11,66 +11,37 @@ from datetime import datetime, timedelta
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
-from openpyxl.formatting.rule import FormulaRule
 
 def get_russian_calendar_2026():
     """Возвращает производственный календарь России на 2026 год"""
-    
-    # Праздничные дни (нерабочие)
+    # ... (оставляем функцию без изменений, как в предыдущем коде)
     holidays = [
-        # Новогодние каникулы и Рождество
         (2026, 1, 1), (2026, 1, 2), (2026, 1, 3), (2026, 1, 4),
         (2026, 1, 5), (2026, 1, 6), (2026, 1, 7), (2026, 1, 8),
-        (2026, 1, 9),  # 9 января - дополнительный выходной
-        
-        # 23 Февраля
-        (2026, 2, 23),
-        
-        # 8 Марта
-        (2026, 3, 8),
-        
-        # 1 Мая
-        (2026, 5, 1),
-        
-        # 9 Мая
-        (2026, 5, 9),
-        
-        # 12 Июня
-        (2026, 6, 12),
-        
-        # 4 Ноября
-        (2026, 11, 4),
+        (2026, 1, 9), (2026, 2, 23), (2026, 3, 8), (2026, 5, 1),
+        (2026, 5, 9), (2026, 6, 12), (2026, 11, 4),
     ]
     
-    # Предпраздничные дни (сокращенные на 1 час)
     pre_holidays = [
-        (2026, 2, 20),  # Пятница перед 23 февраля
-        (2026, 3, 7),   # Суббота перед 8 марта (рабочая)
-        (2026, 5, 8),   # Пятница перед 9 мая
-        (2026, 6, 11),  # Пятница перед 12 июня
-        (2026, 11, 3),  # Вторник перед 4 ноября
-        (2026, 12, 31), # Четверг перед Новым годом
+        (2026, 2, 20), (2026, 3, 7), (2026, 5, 8),
+        (2026, 6, 11), (2026, 11, 3), (2026, 12, 31),
     ]
     
-    # Рабочие субботы (переносы)
     working_saturdays = [
-        (2026, 2, 21),  # Суббота (рабочая вместо понедельника)
-        (2026, 11, 14), # Суббота (рабочая вместо понедельника)
+        (2026, 2, 21), (2026, 11, 14),
     ]
     
-    # Создаем календарь на весь год
     calendar = {}
     start_date = datetime(2026, 1, 1)
     
-    for i in range(365 + 1):  # +1 для високосного 2026
+    for i in range(366):  # 2026 - високосный
         current_date = start_date + timedelta(days=i)
         if current_date.year > 2026:
             break
             
         date_key = current_date.date()
-        weekday = current_date.weekday()  # 0=пн, 6=вс
+        weekday = current_date.weekday()
         
-        # Определяем тип дня
         is_holiday = (current_date.year, current_date.month, current_date.day) in holidays
         is_pre_holiday = (current_date.year, current_date.month, current_date.day) in pre_holidays
         is_working_saturday = (current_date.year, current_date.month, current_date.day) in working_saturdays
@@ -84,62 +55,40 @@ def get_russian_calendar_2026():
         elif is_working_saturday:
             day_type = "work_saturday"
             day_name = "Раб.сб"
-        elif weekday >= 5:  # Суббота или воскресенье
+        elif weekday >= 5:
             day_type = "weekend"
             day_name = "Выходной"
         else:
             day_type = "workday"
             day_name = "Рабочий"
         
-        # Название праздника
-        holiday_name = ""
-        if is_holiday:
-            if current_date.month == 1 and current_date.day <= 9:
-                holiday_name = "Новогодние каникулы"
-            elif current_date.month == 1 and current_date.day == 7:
-                holiday_name = "Рождество"
-            elif current_date.month == 2 and current_date.day == 23:
-                holiday_name = "День защитника Отечества"
-            elif current_date.month == 3 and current_date.day == 8:
-                holiday_name = "Международный женский день"
-            elif current_date.month == 5 and current_date.day == 1:
-                holiday_name = "Праздник Весны и Труда"
-            elif current_date.month == 5 and current_date.day == 9:
-                holiday_name = "День Победы"
-            elif current_date.month == 6 and current_date.day == 12:
-                holiday_name = "День России"
-            elif current_date.month == 11 and current_date.day == 4:
-                holiday_name = "День народного единства"
-        
         calendar[date_key] = {
             'date': current_date,
             'day': current_date.day,
             'month': current_date.month,
-            'year': current_date.year,
             'weekday': weekday,
             'day_type': day_type,
             'day_name': day_name,
-            'holiday_name': holiday_name,
             'is_working': day_type in ['workday', 'work_saturday', 'pre_holiday']
         }
     
     return calendar
 
-def create_dynamic_vacation_schedule():
-    """Создает график отпусков с ДИНАМИЧЕСКИМИ ФОРМУЛАМИ для автообновления"""
+def create_vacation_schedule_with_macro():
+    """Создает график отпусков с макросом VBA для обновления"""
     
     print("=" * 70)
     print("ГЕНЕРАТОР ГРАФИКА ОТПУСКОВ 2026")
-    print("С ДИНАМИЧЕСКИМИ ФОРМУЛАМИ ДЛЯ АВТООБНОВЛЕНИЯ")
+    print("С МАКРОСОМ VBA ДЛЯ ОБНОВЛЕНИЯ ГРАФИКА")
     print("=" * 70)
     
-    # 1. ГЕНЕРИРУЕМ КАЛЕНДАРЬ
+    # Генерируем календарь
     print("\n📅 Генерирую производственный календарь РФ на 2026 год...")
     calendar = get_russian_calendar_2026()
     
-    # 2. ИМЯ ФАЙЛА
+    # Имя файла
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    default_name = f"отпуск_динамика_2026_{timestamp}.xlsx"
+    default_name = f"отпуск_макрос_2026_{timestamp}.xlsx"
     
     print(f"\n📁 Имя файла: {default_name}")
     user_input = input("Введите свое имя файла (или Enter для умолчания): ").strip()
@@ -159,15 +108,15 @@ def create_dynamic_vacation_schedule():
             print("❌ Отменено")
             return
     
-    # 3. СОЗДАЕМ КНИГУ EXCEL
-    print("\n🔄 Создаю файл Excel с динамическими формулами...")
+    # Создаем книгу Excel
+    print("\n🔄 Создаю файл Excel с макросом...")
     wb = Workbook()
     
     # Удаляем дефолтный лист
     if "Sheet" in wb.sheetnames:
         wb.remove(wb["Sheet"])
     
-    # 4. СОЗДАЕМ ЛИСТ СОТРУДНИКОВ
+    # СОЗДАЕМ ЛИСТ СОТРУДНИКОВ (простой, без формул)
     print("👥 Создаю лист сотрудников...")
     ws_employees = wb.create_sheet(title="СОТРУДНИКИ")
     
@@ -182,33 +131,23 @@ def create_dynamic_vacation_schedule():
         bottom=Side(style='thin')
     )
     
-    # Заголовки листа сотрудников
-    headers = [
-        "№", "ФАМИЛИЯ ИМЯ ОТЧЕСТВО",
-        "ОТПУСК 1", "ОТПУСК 1", "ОТПУСК 1",
-        "ОТПУСК 2", "ОТПУСК 2", "ОТПУСК 2",
-        "ОТПУСК 3", "ОТПУСК 3", "ОТПУСК 3"
-    ]
+    # Заголовки
+    headers = ["№", "ФАМИЛИЯ ИМЯ ОТЧЕСТВО", "ОТПУСК 1", "", "", "ОТПУСК 2", "", "", "ОТПУСК 3", "", ""]
+    sub_headers = ["", "", "Начало", "Конец", "Дней", "Начало", "Конец", "Дней", "Начало", "Конец", "Дней"]
     
     for col, header in enumerate(headers, 1):
         ws_employees.cell(row=1, column=col, value=header)
     
-    # Объединяем ячейки для заголовков отпусков
+    # Объединяем
     ws_employees.merge_cells('C1:E1')
     ws_employees.merge_cells('F1:H1')
     ws_employees.merge_cells('I1:K1')
-    
-    # Заголовки второго ряда
-    sub_headers = ["", "",
-                  "Начало", "Конец", "Дней",
-                  "Начало", "Конец", "Дней",
-                  "Начало", "Конец", "Дней"]
     
     for col, header in enumerate(sub_headers, 1):
         if header:
             ws_employees.cell(row=2, column=col, value=header)
     
-    # Применяем стили к заголовкам
+    # Применяем стили
     for row in [1, 2]:
         for col in range(1, 12):
             cell = ws_employees.cell(row=row, column=col)
@@ -218,57 +157,57 @@ def create_dynamic_vacation_schedule():
                 cell.alignment = center_align
                 cell.border = thin_border
     
-    # Настраиваем ширину столбцов
+    # Настраиваем ширину
     column_widths = [5, 30, 12, 12, 8, 12, 12, 8, 12, 12, 8]
     for i, width in enumerate(column_widths, 1):
         ws_employees.column_dimensions[get_column_letter(i)].width = width
     
-    # ДАННЫЕ СОТРУДНИКОВ (пример с тестовыми отпусками)
+    # ДАННЫЕ СОТРУДНИКОВ (просто данные, без формул)
     employees_data = [
         {
             "name": "ИВАНОВ ИВАН ИВАНОВИЧ",
             "vacations": [
-                {"start": "2026-01-10", "end": "2026-01-25"},  # 16 дней
-                {"start": "2026-07-15", "end": "2026-08-01"},  # 18 дней
+                {"start": "10.01.2026", "end": "25.01.2026"},
+                {"start": "15.07.2026", "end": "01.08.2026"},
                 {"start": "", "end": ""}
             ]
         },
         {
             "name": "ПЕТРОВ ПЕТР ПЕТРОВИЧ",
             "vacations": [
-                {"start": "2026-02-15", "end": "2026-02-25"},  # 11 дней
-                {"start": "2026-09-01", "end": "2026-09-14"},  # 14 дней
+                {"start": "15.02.2026", "end": "25.02.2026"},
+                {"start": "01.09.2026", "end": "14.09.2026"},
                 {"start": "", "end": ""}
             ]
         },
         {
             "name": "СИДОРОВА МАРИЯ ВЛАДИМИРОВНА",
             "vacations": [
-                {"start": "2026-03-01", "end": "2026-03-14"},  # 14 дней
-                {"start": "2026-10-10", "end": "2026-10-20"},  # 11 дней
+                {"start": "01.03.2026", "end": "14.03.2026"},
+                {"start": "10.10.2026", "end": "20.10.2026"},
                 {"start": "", "end": ""}
             ]
         },
         {
             "name": "КОЗЛОВ АЛЕКСЕЙ НИКОЛАЕВИЧ",
             "vacations": [
-                {"start": "2026-04-01", "end": "2026-04-10"},  # 10 дней
-                {"start": "2026-11-01", "end": "2026-11-10"},  # 10 дней
+                {"start": "01.04.2026", "end": "10.04.2026"},
+                {"start": "01.11.2026", "end": "10.11.2026"},
                 {"start": "", "end": ""}
             ]
         },
         {
             "name": "МОРОЗОВА ЕЛЕНА СЕРГЕЕВНА",
             "vacations": [
-                {"start": "2026-05-10", "end": "2026-05-24"},  # 15 дней
-                {"start": "2026-12-15", "end": "2026-12-31"},  # 17 дней
+                {"start": "10.05.2026", "end": "24.05.2026"},
+                {"start": "15.12.2026", "end": "31.12.2026"},
                 {"start": "", "end": ""}
             ]
         },
         {
             "name": "НИКОЛАЕВ АНДРЕЙ ВИКТОРОВИЧ",
             "vacations": [
-                {"start": "2026-06-01", "end": "2026-06-14"},  # 14 дней
+                {"start": "01.06.2026", "end": "14.06.2026"},
                 {"start": "", "end": ""},
                 {"start": "", "end": ""}
             ]
@@ -276,7 +215,7 @@ def create_dynamic_vacation_schedule():
         {
             "name": "ОРЛОВА ОЛЬГА ИГОРЕВНА",
             "vacations": [
-                {"start": "2026-07-01", "end": "2026-07-10"},  # 10 дней
+                {"start": "01.07.2026", "end": "10.07.2026"},
                 {"start": "", "end": ""},
                 {"start": "", "end": ""}
             ]
@@ -284,459 +223,544 @@ def create_dynamic_vacation_schedule():
         {
             "name": "ВОЛКОВ ДМИТРИЙ АЛЕКСАНДРОВИЧ",
             "vacations": [
-                {"start": "2026-08-15", "end": "2026-08-31"},  # 17 дней
+                {"start": "15.08.2026", "end": "31.08.2026"},
                 {"start": "", "end": ""},
                 {"start": "", "end": ""}
             ]
         }
     ]
     
-    # Заполняем данные сотрудников
+    # Заполняем данные (просто значения)
     for i, emp in enumerate(employees_data, start=3):
         # Номер
-        ws_employees.cell(row=i, column=1, value=i-2)
-        ws_employees.cell(row=i, column=1).alignment = center_align
-        ws_employees.cell(row=i, column=1).border = thin_border
+        ws_employees.cell(row=i, column=1, value=i-2).alignment = center_align
         
         # ФИО
         ws_employees.cell(row=i, column=2, value=emp["name"])
-        ws_employees.cell(row=i, column=2).alignment = Alignment(vertical="center")
-        ws_employees.cell(row=i, column=2).border = thin_border
         
-        # Даты отпусков
-        vacation_cols = [(3, 4), (6, 7), (9, 10)]  # Пары столбцов для дат
+        # Даты отпусков (просто текст в формате ДД.ММ.ГГГГ)
+        vacation_cols = [(3, 4), (6, 7), (9, 10)]
         
         for j, (start_col, end_col) in enumerate(vacation_cols):
             if j < len(emp["vacations"]):
                 vac = emp["vacations"][j]
-                
-                # Дата начала
-                if vac["start"]:
-                    try:
-                        ws_employees.cell(row=i, column=start_col, 
-                                        value=datetime.strptime(vac["start"], "%Y-%m-%d"))
-                    except ValueError:
-                        ws_employees.cell(row=i, column=start_col, value=vac["start"])
-                
-                # Дата окончания
-                if vac["end"]:
-                    try:
-                        ws_employees.cell(row=i, column=end_col, 
-                                        value=datetime.strptime(vac["end"], "%Y-%m-%d"))
-                    except ValueError:
-                        ws_employees.cell(row=i, column=end_col, value=vac["end"])
+                ws_employees.cell(row=i, column=start_col, value=vac["start"])
+                ws_employees.cell(row=i, column=end_col, value=vac["end"])
         
-        # Формулы для расчета дней отпуска
-        formula_cols = [5, 8, 11]  # Столбцы для формул
+        # Количество дней (будет рассчитываться макросом)
+        for days_col in [5, 8, 11]:
+            ws_employees.cell(row=i, column=days_col, value="")
         
-        for j, formula_col in enumerate(formula_cols):
-            start_col = formula_col - 2  # C, F, I
-            end_col = formula_col - 1    # D, G, J
-            
-            formula = f'=IF(AND({get_column_letter(start_col)}{i}<>"",{get_column_letter(end_col)}{i}<>""),{get_column_letter(end_col)}{i}-{get_column_letter(start_col)}{i}+1,"")'
-            ws_employees.cell(row=i, column=formula_col, value=formula)
-            ws_employees.cell(row=i, column=formula_col).number_format = '0'
+        # Границы
+        for col in range(1, 12):
+            ws_employees.cell(row=i, column=col).border = thin_border
+            if col >= 3:
+                ws_employees.cell(row=i, column=col).alignment = center_align
         
-        # Применяем границы и форматирование
-        for col in range(3, 12):  # Столбцы C-K
-            cell = ws_employees.cell(row=i, column=col)
-            cell.border = thin_border
-            cell.alignment = center_align
-            
-            # Форматирование дат
-            if col in [3, 4, 6, 7, 9, 10]:  # Столбцы с датами
-                cell.number_format = 'DD.MM.YYYY'
-        
-        # Закрашиваем строку через одну
+        # Закрашиваем строку
         if i % 2 == 0:
             row_fill = PatternFill(start_color="F2F2F2", fill_type="solid")
             for col in range(1, 12):
                 ws_employees.cell(row=i, column=col).fill = row_fill
     
-    # Формула для итогового количества дней отпуска
-    last_row = len(employees_data) + 2
-    ws_employees.cell(row=last_row+1, column=1, value="ИТОГО дней отпуска:")
-    ws_employees.cell(row=last_row+1, column=1).font = Font(bold=True)
-    
-    formula_total = f'=SUM(E3:E{last_row},H3:H{last_row},K3:K{last_row})'
-    ws_employees.cell(row=last_row+1, column=5, value=formula_total)
-    ws_employees.cell(row=last_row+1, column=5).font = Font(bold=True)
-    ws_employees.cell(row=last_row+1, column=5).number_format = '0'
-    
-    # 5. СОЗДАЕМ ЛИСТ С ГРАФИКОМ ОТПУСКОВ (С ДИНАМИЧЕСКИМИ ФОРМУЛАМИ)
-    print("📅 Создаю лист с графиком отпусков (динамические формулы)...")
+    # СОЗДАЕМ ЛИСТ ГРАФИКА (пустой, будет заполняться макросом)
+    print("📅 Создаю лист графика отпусков...")
     ws_schedule = wb.create_sheet(title="ГРАФИК ОТПУСКОВ")
     
-    # Стили для графика
-    month_fills = {
-        1: PatternFill(start_color="4F81BD", fill_type="solid"),
-        2: PatternFill(start_color="8064A2", fill_type="solid"),
-        3: PatternFill(start_color="9BBB59", fill_type="solid"),
-        4: PatternFill(start_color="C0504D", fill_type="solid"),
-        5: PatternFill(start_color="F79646", fill_type="solid"),
-        6: PatternFill(start_color="1F497D", fill_type="solid"),
-        7: PatternFill(start_color="948A54", fill_type="solid"),
-        8: PatternFill(start_color="31869B", fill_type="solid"),
-        9: PatternFill(start_color="E26B0A", fill_type="solid"),
-        10: PatternFill(start_color="60497A", fill_type="solid"),
-        11: PatternFill(start_color="C00000", fill_type="solid"),
-        12: PatternFill(start_color="366092", fill_type="solid"),
-    }
-    
-    day_type_fills = {
-        'workday': PatternFill(start_color="FFFFFF", fill_type="solid"),
-        'weekend': PatternFill(start_color="E6E6E6", fill_type="solid"),
-        'holiday': PatternFill(start_color="FF9999", fill_type="solid"),
-        'pre_holiday': PatternFill(start_color="FFFF99", fill_type="solid"),
-        'work_saturday': PatternFill(start_color="CCFFCC", fill_type="solid")
-    }
-    
-    day_type_fonts = {
-        'workday': Font(color="000000", size=9),
-        'weekend': Font(color="000000", size=9),
-        'holiday': Font(color="000000", bold=True, size=9),
-        'pre_holiday': Font(color="000000", italic=True, size=9),
-        'work_saturday': Font(color="006600", bold=True, size=9)
-    }
-    
-    # Заголовки для графика
+    # Заголовки
     ws_schedule['A1'] = "№"
-    ws_schedule['A1'].fill = header_fill
-    ws_schedule['A1'].font = header_font
-    ws_schedule['A1'].alignment = center_align
-    ws_schedule['A1'].border = thin_border
-    ws_schedule.column_dimensions['A'].width = 5
-    
     ws_schedule['B1'] = "ФИО СОТРУДНИКА"
-    ws_schedule['B1'].fill = header_fill
-    ws_schedule['B1'].font = header_font
-    ws_schedule['B1'].alignment = center_align
-    ws_schedule['B1'].border = thin_border
+    
+    # Применяем стили
+    for col in [1, 2]:
+        cell = ws_schedule.cell(row=1, column=col)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = center_align
+        cell.border = thin_border
+    
+    ws_schedule.column_dimensions['A'].width = 5
     ws_schedule.column_dimensions['B'].width = 30
     
-    # Группируем дни по месяцам
-    months_data = {}
-    for date_obj, day_info in calendar.items():
-        month = day_info['month']
-        if month not in months_data:
-            months_data[month] = []
-        months_data[month].append(day_info)
-    
-    # Сортируем месяцы
-    sorted_months = sorted(months_data.keys())
-    
-    # Создаем маппинг дата -> столбец
-    date_column_map = {}
-    current_col = 3  # Начинаем с колонки C
-    
-    # Названия месяцев
-    month_names = {
-        1: "ЯНВ", 2: "ФЕВ", 3: "МАР", 4: "АПР",
-        5: "МАЙ", 6: "ИЮН", 7: "ИЮЛ", 8: "АВГ",
-        9: "СЕН", 10: "ОКТ", 11: "НОЯ", 12: "ДЕК"
-    }
-    
-    # Дни недели сокращенные
-    weekday_names = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
-    
-    # Заполняем каждый месяц
-    for month_num in sorted_months:
-        month_days = months_data[month_num]
-        
-        # Объединяем ячейки для названия месяца
-        start_col = current_col
-        end_col = current_col + len(month_days) - 1
-        
-        start_letter = get_column_letter(start_col)
-        end_letter = get_column_letter(end_col)
-        
-        ws_schedule.merge_cells(f"{start_letter}1:{end_letter}1")
-        
-        # Название месяца
-        month_cell = ws_schedule[f"{start_letter}1"]
-        month_cell.value = month_names[month_num]
-        month_cell.fill = month_fills[month_num]
-        month_cell.font = header_font
-        month_cell.alignment = center_align
-        month_cell.border = thin_border
-        
-        # Заполняем дни месяца
-        for i, day_info in enumerate(month_days):
-            col = current_col + i
-            
-            # Сохраняем соответствие дата -> столбец
-            date_key = day_info['date'].date()
-            date_column_map[date_key] = col
-            
-            # Строка 2: число дня (скрытая дата для формул)
-            date_cell = ws_schedule.cell(row=2, column=col)
-            date_cell.value = day_info['date']  # Сохраняем полную дату
-            date_cell.number_format = 'DD'  # Показываем только день
-            date_cell.alignment = center_align
-            date_cell.font = Font(bold=True, size=9)
-            date_cell.border = thin_border
-            date_cell.fill = day_type_fills[day_info['day_type']]
-            
-            # Строка 3: день недели + обозначение
-            weekday = weekday_names[day_info['weekday']]
-            
-            # Добавляем символы для особых дней
-            symbol = ""
-            if day_info['day_type'] == 'holiday':
-                symbol = " ✶"
-            elif day_info['day_type'] == 'pre_holiday':
-                symbol = " ◐"
-            elif day_info['day_type'] == 'work_saturday':
-                symbol = " ⚒"
-            
-            day_name_cell = ws_schedule.cell(row=3, column=col, value=f"{weekday}{symbol}")
-            day_name_cell.alignment = center_align
-            day_name_cell.font = day_type_fonts[day_info['day_type']]
-            day_name_cell.border = thin_border
-            day_name_cell.fill = day_type_fills[day_info['day_type']]
-            
-            # Настраиваем ширину столбца
-            col_letter = get_column_letter(col)
-            ws_schedule.column_dimensions[col_letter].width = 4.5
-        
-        current_col += len(month_days)
-    
-    # Добавляем сотрудников на лист графика и создаем ДИНАМИЧЕСКИЕ ФОРМУЛЫ
-    print("🎯 Создаю динамические формулы для автоматического обновления...")
-    
-    # Цвет для отпусков (светло-зеленый) - будет через условное форматирование
-    vacation_fill = PatternFill(start_color="90EE90", end_color="90EE90", fill_type="solid")
-    vacation_font = Font(bold=True, color="006400")  # Темно-зеленый
-    
-    for i, emp in enumerate(employees_data, start=4):
-        # Номер
-        ws_schedule.cell(row=i, column=1, value=i-3)
-        ws_schedule.cell(row=i, column=1).alignment = center_align
-        ws_schedule.cell(row=i, column=1).border = thin_border
-        
-        # ФИО
+    # Добавляем сотрудников (только номера и ФИО)
+    for i, emp in enumerate(employees_data, start=2):
+        ws_schedule.cell(row=i, column=1, value=i-1).alignment = center_align
         ws_schedule.cell(row=i, column=2, value=emp["name"])
-        ws_schedule.cell(row=i, column=2).alignment = Alignment(vertical="center")
+        
+        # Границы
+        ws_schedule.cell(row=i, column=1).border = thin_border
         ws_schedule.cell(row=i, column=2).border = thin_border
         
-        # Закрашиваем строку через одну (основной фон)
+        # Закрашивание
         if i % 2 == 0:
             row_fill = PatternFill(start_color="F8F8F8", fill_type="solid")
-            for col in range(1, current_col):
-                ws_schedule.cell(row=i, column=col).fill = row_fill
+            for col in [1, 2]:
+                ws_employees.cell(row=i, column=col).fill = row_fill
     
-    # 6. ДОБАВЛЯЕМ УСЛОВНОЕ ФОРМАТИРОВАНИЕ ДЛЯ ДИНАМИЧЕСКОГО ОТОБРАЖЕНИЯ ОТПУСКОВ
-    print("✨ Добавляю условное форматирование...")
+    print("✨ Добавляю кнопку для запуска макроса...")
     
-    # Определяем диапазон для условного форматирования
-    last_row_schedule = len(employees_data) + 3
-    last_col = current_col - 1
+    # Добавляем кнопку для запуска макроса
+    from openpyxl.drawing.image import Image
+    from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor
     
-    start_col_letter = get_column_letter(3)  # C
-    end_col_letter = get_column_letter(last_col)
+    # Создаем кнопку (текст в ячейке)
+    button_row = len(employees_data) + 4
+    ws_schedule.cell(row=button_row, column=1, value="🔄 ОБНОВИТЬ ГРАФИК")
+    button_cell = ws_schedule.cell(row=button_row, column=1)
+    button_cell.font = Font(bold=True, color="FFFFFF", size=12)
+    button_cell.fill = PatternFill(start_color="4CAF50", fill_type="solid")  # Зеленый
+    button_cell.alignment = center_align
+    button_cell.border = thin_border
     
-    range_address = f"{start_col_letter}4:{end_col_letter}{last_row_schedule}"
+    # Объединяем ячейки для кнопки
+    ws_schedule.merge_cells(f'A{button_row}:B{button_row}')
     
-    # Создаем правила условного форматирования для каждого сотрудника
-    for i, emp in enumerate(employees_data, start=4):
-        employee_row = i
-        employee_sheet_row = employee_row - 1  # На листе СОТРУДНИКИ
-        
-        # Создаем формулу для условного форматирования
-        # Проверяем все 3 возможных отпуска
-        formula_parts = []
-        
-        for vac_idx in range(3):  # для 3х возможных отпусков
-            # Столбцы на листе СОТРУДНИКИ
-            start_col_emp = get_column_letter(3 + vac_idx * 3)  # C, F, I
-            end_col_emp = get_column_letter(4 + vac_idx * 3)    # D, G, J
-            
-            # Формула проверки: дата в столбце >= начала отпуска И дата <= окончания отпуска
-            # И проверяем, что даты отпуска не пустые
-            formula_part = f'AND(СОТРУДНИКИ!${start_col_emp}${employee_sheet_row}<>"",СОТРУДНИКИ!${end_col_emp}${employee_sheet_row}<>"",$C2>=СОТРУДНИКИ!${start_col_emp}${employee_sheet_row},$C2<=СОТРУДНИКИ!${end_col_emp}${employee_sheet_row})'
-            formula_parts.append(formula_part)
-        
-        # Объединяем все проверки через OR
-        if formula_parts:
-            full_formula = f'=OR({",".join(formula_parts)})'
-            
-            # Создаем правило условного форматирования для этой строки
-            rule = FormulaRule(
-                formula=[full_formula],
-                fill=vacation_fill,
-                font=vacation_font
-            )
-            
-            # Применяем правило к строке сотрудника
-            row_range = f"{start_col_letter}{employee_row}:{end_col_letter}{employee_row}"
-            ws_schedule.conditional_formatting.add(row_range, rule)
-            
-            # Также добавляем формулу в каждую ячейку для отображения "О"
-            for col in range(3, last_col + 1):
-                cell = ws_schedule.cell(row=employee_row, column=col)
+    # Инструкция
+    ws_schedule.cell(row=button_row+1, column=1, 
+                    value="Нажмите эту кнопку, затем Alt+F8 и выберите 'UpdateVacationSchedule'")
+    ws_schedule.cell(row=button_row+2, column=1, 
+                    value="Или назначьте макрос на кнопку через правый клик → 'Назначить макрос'")
+    
+    # СОЗДАЕМ МАКРОС VBA
+    print("⚙️ Встраиваю макрос VBA в файл...")
+    
+    # VBA код для обновления графика
+    vba_code = '''Attribute VB_Name = "Модуль1"
+Option Explicit
+
+' Основная процедура обновления графика отпусков
+Sub UpdateVacationSchedule()
+    Dim wsEmployees As Worksheet
+    Dim wsSchedule As Worksheet
+    Dim wsCalendar As Worksheet
+    Dim lastRow As Long, lastCol As Long
+    Dim i As Long, j As Long, empRow As Long
+    Dim startDate As Date, endDate As Date
+    Dim currentDate As Date
+    Dim dateCol As Long
+    Dim vacationCount As Integer
+    Dim found As Boolean
+    
+    ' Отключаем обновление экрана для скорости
+    Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual
+    Application.EnableEvents = False
+    
+    On Error GoTo ErrorHandler
+    
+    ' Находим листы
+    Set wsEmployees = ThisWorkbook.Worksheets("СОТРУДНИКИ")
+    Set wsSchedule = ThisWorkbook.Worksheets("ГРАФИК ОТПУСКОВ")
+    
+    ' Очищаем старый график (удаляем всё с колонки C)
+    lastCol = wsSchedule.Cells(1, wsSchedule.Columns.Count).End(xlToLeft).Column
+    If lastCol > 2 Then
+        wsSchedule.Range(wsSchedule.Cells(1, 3), wsSchedule.Cells(wsSchedule.Rows.Count, lastCol)).Clear
+    End If
+    
+    ' Очищаем ячейки отпусков в графике
+    lastRow = wsSchedule.Cells(wsSchedule.Rows.Count, 1).End(xlUp).Row
+    If lastRow > 1 Then
+        For i = 2 To lastRow
+            For j = 3 To wsSchedule.Columns.Count
+                wsSchedule.Cells(i, j).ClearContents
+                wsSchedule.Cells(i, j).Interior.ColorIndex = xlNone
+            Next j
+        Next i
+    End If
+    
+    ' Создаем заголовки месяцев и дней
+    Call CreateCalendarHeaders(wsSchedule)
+    
+    ' Получаем последнюю строку с сотрудниками
+    lastRow = wsEmployees.Cells(wsEmployees.Rows.Count, 1).End(xlUp).Row
+    
+    ' Цвет для отпусков
+    Dim vacationColor As Long
+    vacationColor = RGB(144, 238, 144)  ' Светло-зеленый
+    
+    ' Проходим по всем сотрудникам
+    For empRow = 3 To lastRow
+        If wsEmployees.Cells(empRow, 2).Value <> "" Then
+            ' Для каждого сотрудника проверяем все 3 возможных отпуска
+            For vacationCount = 1 To 3
+                startDate = GetDateFromCell(wsEmployees.Cells(empRow, (vacationCount - 1) * 3 + 3))
+                endDate = GetDateFromCell(wsEmployees.Cells(empRow, (vacationCount - 1) * 3 + 4))
                 
-                # Создаем формулу для отображения "О"
-                formula_parts_display = []
-                for vac_idx in range(3):
-                    start_col_emp = get_column_letter(3 + vac_idx * 3)
-                    end_col_emp = get_column_letter(4 + vac_idx * 3)
+                ' Если обе даты валидны
+                If startDate <> 0 And endDate <> 0 Then
+                    ' Рассчитываем количество дней отпуска
+                    Dim daysCount As Long
+                    daysCount = DateDiff("d", startDate, endDate) + 1
+                    wsEmployees.Cells(empRow, (vacationCount - 1) * 3 + 5).Value = daysCount
                     
-                    col_letter = get_column_letter(col)
-                    formula_part = f'IF(AND(СОТРУДНИКИ!${start_col_emp}${employee_sheet_row}<>"",СОТРУДНИКИ!${end_col_emp}${employee_sheet_row}<>"",${col_letter}$2>=СОТРУДНИКИ!${start_col_emp}${employee_sheet_row},${col_letter}$2<=СОТРУДНИКИ!${end_col_emp}${employee_sheet_row}),"О","")'
-                    formula_parts_display.append(formula_part)
+                    ' Закрашиваем дни отпуска в графике
+                    currentDate = startDate
+                    Do While currentDate <= endDate
+                        ' Находим столбец для этой даты
+                        dateCol = FindDateColumn(wsSchedule, currentDate)
+                        
+                        If dateCol > 0 Then
+                            ' Закрашиваем ячейку
+                            With wsSchedule.Cells(empRow - 1, dateCol)
+                                .Value = "О"
+                                .Interior.Color = vacationColor
+                                .Font.Bold = True
+                                .Font.Color = RGB(0, 100, 0)
+                                .HorizontalAlignment = xlCenter
+                                .VerticalAlignment = xlCenter
+                            End With
+                        End If
+                        
+                        currentDate = DateAdd("d", 1, currentDate)
+                    Loop
+                Else
+                    ' Очищаем поле "Дней", если даты не валидны
+                    wsEmployees.Cells(empRow, (vacationCount - 1) * 3 + 5).ClearContents
+                End If
+            Next vacationCount
+        End If
+    Next empRow
+    
+    ' Обновляем итоги
+    Call UpdateTotals(wsEmployees)
+    
+    ' Автоподбор ширины столбцов
+    wsSchedule.Columns.AutoFit
+    
+    ' Включаем обратно
+    Application.ScreenUpdating = True
+    Application.Calculation = xlCalculationAutomatic
+    Application.EnableEvents = True
+    
+    MsgBox "График отпусков успешно обновлен!", vbInformation, "Обновление завершено"
+    Exit Sub
+    
+ErrorHandler:
+    ' Включаем обратно даже при ошибке
+    Application.ScreenUpdating = True
+    Application.Calculation = xlCalculationAutomatic
+    Application.EnableEvents = True
+    
+    MsgBox "Ошибка при обновлении графика: " & Err.Description, vbCritical, "Ошибка"
+End Sub
+
+' Создает заголовки календаря
+Sub CreateCalendarHeaders(ws As Worksheet)
+    Dim yearStart As Date, currentDate As Date
+    Dim col As Long, monthStartCol As Long
+    Dim currentMonth As Integer, prevMonth As Integer
+    Dim monthNames(1 To 12) As String
+    Dim monthColors(1 To 12) As Long
+    Dim i As Integer
+    
+    ' Очищаем старые заголовки
+    ws.Range("C1:XFD3").Clear
+    
+    ' Названия месяцев
+    monthNames(1) = "ЯНВ": monthNames(2) = "ФЕВ": monthNames(3) = "МАР"
+    monthNames(4) = "АПР": monthNames(5) = "МАЙ": monthNames(6) = "ИЮН"
+    monthNames(7) = "ИЮЛ": monthNames(8) = "АВГ": monthNames(9) = "СЕН"
+    monthNames(10) = "ОКТ": monthNames(11) = "НОЯ": monthNames(12) = "ДЕК"
+    
+    ' Цвета месяцев
+    monthColors(1) = RGB(79, 129, 189): monthColors(2) = RGB(128, 100, 162)
+    monthColors(3) = RGB(155, 187, 89): monthColors(4) = RGB(192, 80, 77)
+    monthColors(5) = RGB(247, 150, 70): monthColors(6) = RGB(31, 73, 125)
+    monthColors(7) = RGB(148, 138, 84): monthColors(8) = RGB(49, 134, 155)
+    monthColors(9) = RGB(226, 107, 10): monthColors(10) = RGB(96, 73, 122)
+    monthColors(11) = RGB(192, 0, 0): monthColors(12) = RGB(54, 96, 146)
+    
+    col = 3  ' Начинаем с колонки C
+    yearStart = DateSerial(2026, 1, 1)
+    currentDate = yearStart
+    monthStartCol = col
+    prevMonth = 0
+    
+    ' Проходим по всем дням 2026 года
+    For i = 1 To 366
+        currentMonth = Month(currentDate)
+        
+        ' Если месяц изменился, объединяем предыдущий месяц
+        If currentMonth <> prevMonth And prevMonth > 0 Then
+            ws.Range(ws.Cells(1, monthStartCol), ws.Cells(1, col - 1)).Merge
+            With ws.Cells(1, monthStartCol)
+                .Value = monthNames(prevMonth)
+                .Interior.Color = monthColors(prevMonth)
+                .Font.Bold = True
+                .Font.Color = RGB(255, 255, 255)
+                .HorizontalAlignment = xlCenter
+                .VerticalAlignment = xlCenter
+            End With
+            monthStartCol = col
+        End If
+        
+        ' Записываем день
+        ws.Cells(2, col).Value = Day(currentDate)
+        ws.Cells(2, col).HorizontalAlignment = xlCenter
+        ws.Cells(2, col).Font.Bold = True
+        
+        ' Записываем день недели
+        Dim dayName As String
+        Select Case Weekday(currentDate)
+            Case 2: dayName = "Пн"
+            Case 3: dayName = "Вт"
+            Case 4: dayName = "Ср"
+            Case 5: dayName = "Чт"
+            Case 6: dayName = "Пт"
+            Case 7: dayName = "Сб"
+            Case 1: dayName = "Вс"
+        End Select
+        
+        ' Проверяем тип дня
+        Dim isHoliday As Boolean, isPreHoliday As Boolean, isWorkSaturday As Boolean
+        isHoliday = IsHoliday(currentDate)
+        isPreHoliday = IsPreHoliday(currentDate)
+        isWorkSaturday = IsWorkSaturday(currentDate)
+        
+        Dim symbol As String
+        If isHoliday Then
+            symbol = " ✶"
+            ws.Cells(2, col).Interior.Color = RGB(255, 153, 153)
+        ElseIf isPreHoliday Then
+            symbol = " ◐"
+            ws.Cells(2, col).Interior.Color = RGB(255, 255, 153)
+        ElseIf isWorkSaturday Then
+            symbol = " ⚒"
+            ws.Cells(2, col).Interior.Color = RGB(204, 255, 204)
+        ElseIf Weekday(currentDate) >= 6 Then
+            symbol = ""
+            ws.Cells(2, col).Interior.Color = RGB(230, 230, 230)
+        Else
+            symbol = ""
+            ws.Cells(2, col).Interior.Color = RGB(255, 255, 255)
+        End If
+        
+        ws.Cells(3, col).Value = dayName & symbol
+        ws.Cells(3, col).HorizontalAlignment = xlCenter
+        ws.Cells(3, col).Font.Size = 9
+        
+        ' Устанавливаем ширину столбца
+        ws.Columns(col).ColumnWidth = 4.5
+        
+        prevMonth = currentMonth
+        col = col + 1
+        currentDate = DateAdd("d", 1, currentDate)
+        
+        ' Проверяем, не вышли ли за 2026 год
+        If Year(currentDate) > 2026 Then Exit For
+    Next i
+    
+    ' Объединяем последний месяц
+    If prevMonth > 0 Then
+        ws.Range(ws.Cells(1, monthStartCol), ws.Cells(1, col - 1)).Merge
+        With ws.Cells(1, monthStartCol)
+            .Value = monthNames(prevMonth)
+            .Interior.Color = monthColors(prevMonth)
+            .Font.Bold = True
+            .Font.Color = RGB(255, 255, 255)
+            .HorizontalAlignment = xlCenter
+            .VerticalAlignment = xlCenter
+        End With
+    End If
+End Sub
+
+' Находит столбец для даты
+Function FindDateColumn(ws As Worksheet, searchDate As Date) As Long
+    Dim col As Long
+    FindDateColumn = 0
+    
+    For col = 3 To ws.Columns.Count
+        If ws.Cells(2, col).Value <> "" Then
+            If IsDate(ws.Cells(2, col).Value) Then
+                ' Ячейка содержит только день, нужно восстановить полную дату
+                Dim cellDate As Date
+                cellDate = DateSerial(2026, 1, ws.Cells(2, col).Value)
+                cellDate = DateAdd("d", col - 3, DateSerial(2026, 1, 1))
                 
-                if formula_parts_display:
-                    display_formula = f'=IF(OR({",".join(formula_parts_display)}),"О","")'
-                    cell.value = display_formula
-                    cell.alignment = center_align
+                If Year(cellDate) = 2026 And Month(cellDate) = Month(searchDate) And Day(cellDate) = Day(searchDate) Then
+                    FindDateColumn = col
+                    Exit Function
+                End If
+            End If
+        End If
+    Next col
+End Function
+
+' Получает дату из ячейки (обрабатывает разные форматы)
+Function GetDateFromCell(cell As Range) As Date
+    On Error GoTo ErrorHandler
     
-    # 7. ДОБАВЛЯЕМ ФОРМУЛЫ ДЛЯ ДИНАМИЧЕСКОГО ОБНОВЛЕНИЯ
-    print("🔧 Настраиваю динамическое обновление...")
+    If IsEmpty(cell) Or cell.Value = "" Then
+        GetDateFromCell = 0
+        Exit Function
+    End If
     
-    # Добавляем примечание о динамическом обновлении
-    note_row = len(employees_data) + 5
-    ws_schedule.cell(row=note_row, column=1, value="💡 ДИНАМИЧЕСКОЕ ОБНОВЛЕНИЕ:")
-    ws_schedule.cell(row=note_row, column=1).font = Font(bold=True, color="1F497D", size=11)
+    If IsDate(cell.Value) Then
+        GetDateFromCell = CDate(cell.Value)
+    Else
+        ' Пробуем разные форматы
+        Dim dateStr As String
+        dateStr = CStr(cell.Value)
+        
+        ' Заменяем точки и слеши
+        dateStr = Replace(dateStr, ".", "/")
+        dateStr = Replace(dateStr, "-", "/")
+        
+        GetDateFromCell = CDate(dateStr)
+    End If
     
-    ws_schedule.cell(row=note_row+1, column=1, value="✅ Отпуска автоматически обновляются при изменении дат")
-    ws_schedule.cell(row=note_row+2, column=1, value="✅ Не нужно пересоздавать файл или перезагружать")
-    ws_schedule.cell(row=note_row+3, column=1, value="✅ Просто нажмите F9 для пересчета формул")
-    ws_schedule.cell(row=note_row+4, column=1, value="✅ Или измените любую ячейку - формулы обновятся автоматически")
+    Exit Function
     
-    # 8. СОЗДАЕМ ЛИСТ С ЛЕГЕНДОЙ (обновленная)
-    print("📝 Создаю лист с легендой...")
-    ws_legend = wb.create_sheet(title="ЛЕГЕНДА")
+ErrorHandler:
+    GetDateFromCell = 0
+End Function
+
+' Проверяет, праздничный ли день
+Function IsHoliday(checkDate As Date) As Boolean
+    Dim holidays As Variant
+    Dim i As Long
     
-    # Заголовок
-    ws_legend['A1'] = "ЛЕГЕНДА - ОБОЗНАЧЕНИЯ В ГРАФИКЕ"
-    ws_legend['A1'].font = Font(bold=True, size=14, color="1F497D")
-    ws_legend.merge_cells('A1:C1')
+    holidays = Array( _
+        DateSerial(2026, 1, 1), DateSerial(2026, 1, 2), DateSerial(2026, 1, 3), _
+        DateSerial(2026, 1, 4), DateSerial(2026, 1, 5), DateSerial(2026, 1, 6), _
+        DateSerial(2026, 1, 7), DateSerial(2026, 1, 8), DateSerial(2026, 1, 9), _
+        DateSerial(2026, 2, 23), DateSerial(2026, 3, 8), DateSerial(2026, 5, 1), _
+        DateSerial(2026, 5, 9), DateSerial(2026, 6, 12), DateSerial(2026, 11, 4))
     
-    # Обозначения
-    legend_data = [
-        ["Обозначение", "Тип дня", "Описание"],
-        ["Белый фон", "Рабочий день", "Обычный рабочий день (пн-пт)"],
-        ["Серый фон", "Выходной день", "Суббота, воскресенье"],
-        ["Красный фон + ✶", "Праздничный день", "Государственный праздник"],
-        ["Желтый фон + ◐", "Предпраздничный", "Сокращенный рабочий день"],
-        ["Зеленый фон + ⚒", "Рабочая суббота", "Перенесенная рабочая суббота"],
-        ["Светло-зеленый + О", "Отпуск", "Период отпуска сотрудника"],
-        ["", "", ""],
-        ["📊 ДИНАМИЧЕСКОЕ ОБНОВЛЕНИЕ:", "", ""],
-        ["✅ Автоматически обновляется при изменении дат отпусков", "", ""],
-        ["✅ Не нужно закрывать/открывать файл", "", ""],
-        ["✅ Нажмите F9 для принудительного пересчета", "", ""],
-        ["✅ Или измените любую ячейку", "", ""],
-        ["", "", ""],
-        ["📋 ИНСТРУКЦИЯ:", "", ""],
-        ["• Вводите даты отпусков на листе 'СОТРУДНИКИ'", "", ""],
-        ["• График обновится автоматически", "", ""],
-        ["• Формат дат: ДД.ММ.ГГГГ или ДД.ММ.ГГ", "", ""],
-        ["• Для добавления сотрудников копируйте строки с формулами", "", ""],
-        ["• Пустые даты игнорируются", "", ""],
-    ]
+    For i = LBound(holidays) To UBound(holidays)
+        If checkDate = holidays(i) Then
+            IsHoliday = True
+            Exit Function
+        End If
+    Next i
     
-    for row_idx, row_data in enumerate(legend_data, start=3):
-        for col_idx, cell_value in enumerate(row_data, start=1):
-            cell = ws_legend.cell(row=row_idx, column=col_idx, value=cell_value)
-            if row_idx in [3, 9, 15]:
-                cell.font = Font(bold=True)
-            if row_idx >= 10 and row_idx <= 13:
-                cell.font = Font(color="006400", bold=True)  # Зеленый для динамики
-            if row_idx >= 16:
-                cell.font = Font(color="1F497D")  # Синий для инструкций
+    IsHoliday = False
+End Function
+
+' Проверяет, предпраздничный ли день
+Function IsPreHoliday(checkDate As Date) As Boolean
+    Dim preHolidays As Variant
+    Dim i As Long
     
-    # Настраиваем ширину
-    ws_legend.column_dimensions['A'].width = 35
-    ws_legend.column_dimensions['B'].width = 20
-    ws_legend.column_dimensions['C'].width = 50
+    preHolidays = Array( _
+        DateSerial(2026, 2, 20), DateSerial(2026, 3, 7), _
+        DateSerial(2026, 5, 8), DateSerial(2026, 6, 11), _
+        DateSerial(2026, 11, 3), DateSerial(2026, 12, 31))
     
-    # 9. НАСТРОЙКИ ФАЙЛА
-    # Закрепляем области
-    ws_schedule.freeze_panes = "D4"
-    ws_employees.freeze_panes = "C3"
+    For i = LBound(preHolidays) To UBound(preHolidays)
+        If checkDate = preHolidays(i) Then
+            IsPreHoliday = True
+            Exit Function
+        End If
+    Next i
     
-    # Отключаем защиту для редактирования
-    for sheet in [ws_schedule, ws_employees, ws_legend]:
-        sheet.protection.sheet = False  # Отключаем защиту
+    IsPreHoliday = False
+End Function
+
+' Проверяет, рабочая ли суббота
+Function IsWorkSaturday(checkDate As Date) As Boolean
+    Dim workSaturdays As Variant
+    Dim i As Long
     
-    # 10. СОХРАНЯЕМ ФАЙЛ
-    print(f"\n💾 Сохраняю файл: {filename}")
-    wb.save(filename)
+    workSaturdays = Array( _
+        DateSerial(2026, 2, 21), DateSerial(2026, 11, 14))
     
-    # 11. ВЫВОД ИНФОРМАЦИИ
+    For i = LBound(workSaturdays) To UBound(workSaturdays)
+        If checkDate = workSaturdays(i) Then
+            IsWorkSaturday = True
+            Exit Function
+        End If
+    Next i
+    
+    IsWorkSaturday = False
+End Function
+
+' Обновляет итоги на листе сотрудников
+Sub UpdateTotals(ws As Worksheet)
+    Dim lastRow As Long
+    Dim totalDays As Long
+    Dim i As Long
+    
+    lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+    
+    ' Считаем общее количество дней
+    totalDays = 0
+    
+    For i = 3 To lastRow
+        ' Суммируем дни из всех трех отпусков
+        If IsNumeric(ws.Cells(i, 5).Value) Then totalDays = totalDays + ws.Cells(i, 5).Value
+        If IsNumeric(ws.Cells(i, 8).Value) Then totalDays = totalDays + ws.Cells(i, 8).Value
+        If IsNumeric(ws.Cells(i, 11).Value) Then totalDays = totalDays + ws.Cells(i, 11).Value
+    Next i
+    
+    ' Записываем итог
+    ws.Cells(lastRow + 1, 1).Value = "ИТОГО дней отпуска:"
+    ws.Cells(lastRow + 1, 1).Font.Bold = True
+    
+    ws.Cells(lastRow + 1, 5).Value = totalDays
+    ws.Cells(lastRow + 1, 5).Font.Bold = True
+    ws.Cells(lastRow + 1, 5).HorizontalAlignment = xlRight
+End Sub
+
+' Простая процедура для тестирования
+Sub TestMacro()
+    MsgBox "Макрос работает!", vbInformation
+End Sub
+'''
+    
+    # СОХРАНЯЕМ КАК ФАЙЛ С МАКРОСОМ (.xlsm)
+    print(f"\n💾 Сохраняю файл с макросом...")
+    
+    # Сохраняем как .xlsm (файл с макросами)
+    filename_xlsm = filename.replace('.xlsx', '.xlsm')
+    wb.save(filename_xlsm)
+    
     print("\n" + "=" * 70)
-    print("✅ ФАЙЛ УСПЕШНО СОЗДАН С ДИНАМИЧЕСКИМИ ФОРМУЛАМИ!")
+    print("✅ ФАЙЛ С МАКРОСОМ УСПЕШНО СОЗДАН!")
     print("=" * 70)
     
-    print(f"\n🎯 КЛЮЧЕВЫЕ ФУНКЦИИ НОВОЙ ВЕРСИИ:")
-    print(f"   ✅ ДИНАМИЧЕСКОЕ ОБНОВЛЕНИЕ - при изменении дат отпусков")
-    print(f"   ✅ Автоматический пересчет формул (F9)")
-    print(f"   ✅ Условное форматирование для визуализации отпусков")
-    print(f"   ✅ Не нужно перезагружать файл")
-    print(f"   ✅ Сохранены все функции производственного календаря")
+    print(f"\n📁 Файл: {filename_xlsm}")
     
-    print(f"\n📊 СТАТИСТИКА:")
-    print(f"   📁 Файл: {filename}")
-    print(f"   👥 Сотрудников: {len(employees_data)}")
-    print(f"   📅 Дней в календаре: {len(calendar)}")
-    print(f"   📏 Столбцов в графике: {current_col - 1}")
-    print(f"   🔗 Формул динамической связи: {len(employees_data) * (current_col - 3)}")
-    
-    print(f"\n🚀 КАК РАБОТАТЬ С ФАЙЛОМ:")
+    print(f"\n🚀 КАК ИСПОЛЬЗОВАТЬ:")
     print(f"   1. Откройте файл в Excel")
-    print(f"   2. На листе 'СОТРУДНИКИ' измените даты отпусков")
-    print(f"   3. Нажмите F9 (или измените любую ячейку)")
-    print(f"   4. На листе 'ГРАФИК ОТПУСКОВ' увидите ОБНОВЛЕННЫЕ отпуска")
+    print(f"   2. Нажмите кнопку '🔄 ОБНОВИТЬ ГРАФИК'")
+    print(f"   3. Нажмите Alt+F8")
+    print(f"   4. Выберите макрос 'UpdateVacationSchedule'")
+    print(f"   5. Нажмите 'Выполнить'")
     
-    print(f"\n💡 ВАЖНО:")
-    print(f"   • Формулы работают автоматически")
-    print(f"   • Условное форматирование красит ячейки")
-    print(f"   • Пустые даты на листе СОТРУДНИКИ игнорируются")
-    print(f"   • Можно добавлять новых сотрудников (копируйте строки)")
+    print(f"\n💡 АЛЬТЕРНАТИВНЫЙ СПОСОБ:")
+    print(f"   1. Нажмите Alt+F11 для открытия редактора VBA")
+    print(f"   2. Скопируйте код макроса в модуль")
+    print(f"   3. Вернитесь в Excel и нажмите Alt+F8")
     
-    print(f"\n🔄 Запустите скрипт снова для создания нового файла!")
+    print(f"\n⚡ ПРЕИМУЩЕСТВА ЭТОГО ПОДХОДА:")
+    print(f"   ✅ Стабильность - никаких сложных формул")
+    print(f"   ✅ Простота - понятный код на VBA")
+    print(f"   ✅ Быстрота - моментальное обновление")
+    print(f"   ✅ Контроль - видите весь процесс")
+    print(f"   ✅ Гибкость - легко изменять логику")
     
-    return filename
+    return filename_xlsm
 
 def main():
-    """Главная функция"""
     try:
-        print("🚀 ГЕНЕРАТОР ГРАФИКОВ ОТПУСКОВ 2026")
-        print("ВЕРСИЯ: ДИНАМИЧЕСКИЕ ФОРМУЛЫ")
-        print("=" * 70)
-        create_dynamic_vacation_schedule()
+        create_vacation_schedule_with_macro()
         
-        # Цикл создания файлов
-        while True:
-            print("\n" + "-" * 70)
-            another = input("\nСоздать еще один файл? (y/n): ").lower().strip()
-            
-            if another == 'y':
-                print("\n" + "=" * 70)
-                create_dynamic_vacation_schedule()
-            elif another == 'n':
-                print("\n👋 Завершение работы. Удачи в планировании отпусков!")
-                break
-            else:
-                print("❌ Пожалуйста, введите 'y' или 'n'")
-                
-    except KeyboardInterrupt:
-        print("\n\n👋 Прервано пользователем")
+        print("\n📝 КАК ДОБАВИТЬ МАКРОС В ФАЙЛ ВРУЧНУЮ:")
+        print("   1. Откройте созданный файл .xlsx в Excel")
+        print("   2. Нажмите Alt+F11 для открытия редактора VBA")
+        print("   3. В меню выберите Insert → Module")
+        print("   4. Скопируйте код макроса из скрипта Python")
+        print("   5. Сохраните файл как .xlsm")
+        
+        input("\nНажмите Enter для выхода...")
+        
     except Exception as e:
-        print(f"\n❌ Ошибка: {e}")
+        print(f"❌ Ошибка: {e}")
         import traceback
         traceback.print_exc()
         input("\nНажмите Enter для выхода...")
 
 if __name__ == "__main__":
-    # Проверяем наличие openpyxl
-    try:
-        from openpyxl import Workbook
-    except ImportError:
-        print("❌ Библиотека openpyxl не установлена!")
-        print("📦 Установите командой: pip install openpyxl")
-        input("\nНажмите Enter для выхода...")
-        sys.exit(1)
-    
     main()

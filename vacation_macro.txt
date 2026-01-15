@@ -1,0 +1,203 @@
+Attribute VB_Name = "Module1"
+' МАКРОС ДЛЯ ОБНОВЛЕНИЯ ГРАФИКА ОТПУСКОВ
+' Автор: Генератор графиков отпусков
+
+Option Explicit
+
+' ОСНОВНОЙ МАКРОС - запускайте эту процедуру
+Public Sub UpdateSchedule()
+    Dim wsData As Worksheet    ' Лист с данными
+    Dim wsGraph As Worksheet   ' Лист с графиком
+    Dim lastRow As Long        ' Последняя строка с данными
+    Dim lastCol As Long        ' Последний столбец в графике
+    Dim i As Long, j As Long   ' Счетчики
+    Dim startDate As Date      ' Начало отпуска
+    Dim endDate As Date        ' Конец отпуска
+    Dim currentDate As Date    ' Текущая дата в цикле
+    Dim colNum As Long         ' Номер столбца для даты
+    Dim daysCount As Long      ' Количество дней отпуска
+    
+    ' Отключаем обновление экрана для скорости
+    Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual
+    Application.DisplayAlerts = False
+    
+    On Error GoTo ErrorHandler
+    
+    ' Находим наши листы
+    Set wsData = ThisWorkbook.Worksheets("ДАННЫЕ")
+    Set wsGraph = ThisWorkbook.Worksheets("ГРАФИК")
+    
+    ' 1. ОЧИСТКА СТАРОГО ГРАФИКА
+    Call ClearOldSchedule(wsGraph)
+    
+    ' 2. ОБНОВЛЕНИЕ ДАННЫХ СОТРУДНИКОВ
+    lastRow = wsData.Cells(wsData.Rows.Count, 1).End(xlUp).Row
+    
+    For i = 2 To lastRow
+        If wsData.Cells(i, 2).Value <> "" Then ' Если есть ФИО
+            ' ОБРАБОТКА ПЕРВОГО ОТПУСКА
+            Call ProcessVacation(wsData, wsGraph, i, 3, 4, 5)
+            
+            ' ОБРАБОТКА ВТОРОГО ОТПУСКА
+            Call ProcessVacation(wsData, wsGraph, i, 6, 7, 8)
+            
+            ' ОБРАБОТКА ТРЕТЬЕГО ОТПУСКА
+            Call ProcessVacation(wsData, wsGraph, i, 9, 10, 11)
+        End If
+    Next i
+    
+    ' 3. АВТОПОДБОР ШИРИНЫ СТОЛБЦОВ
+    wsGraph.Columns.AutoFit
+    
+    ' 4. РАСЧЕТ ИТОГОВ
+    Call CalculateTotals(wsData)
+    
+    ' Включаем обратно
+    Application.ScreenUpdating = True
+    Application.Calculation = xlCalculationAutomatic
+    Application.DisplayAlerts = True
+    
+    MsgBox "График отпусков успешно обновлен!", vbInformation, "Готово"
+    Exit Sub
+    
+ErrorHandler:
+    ' Включаем обратно даже при ошибке
+    Application.ScreenUpdating = True
+    Application.Calculation = xlCalculationAutomatic
+    Application.DisplayAlerts = True
+    
+    MsgBox "Ошибка: " & Err.Description, vbCritical, "Ошибка макроса"
+End Sub
+
+' ОЧИСТКА СТАРОГО ГРАФИКА
+Private Sub ClearOldSchedule(ws As Worksheet)
+    Dim lastCol As Long
+    Dim lastRow As Long
+    Dim i As Long, j As Long
+    
+    ' Находим последний столбец
+    lastCol = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
+    
+    ' Если есть столбцы кроме A и B, очищаем их
+    If lastCol > 2 Then
+        For i = 2 To ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+            For j = 3 To lastCol
+                With ws.Cells(i, j)
+                    .ClearContents
+                    .Interior.ColorIndex = xlNone
+                    .Font.ColorIndex = xlAutomatic
+                    .Font.Bold = False
+                End With
+            Next j
+        Next i
+    End If
+End Sub
+
+' ОБРАБОТКА ОДНОГО ОТПУСКА
+Private Sub ProcessVacation(wsData As Worksheet, wsGraph As Worksheet, _
+                           rowNum As Long, startCol As Long, _
+                           endCol As Long, daysCol As Long)
+    Dim startDate As Date
+    Dim endDate As Date
+    Dim currentDate As Date
+    Dim colNum As Long
+    Dim daysCount As Long
+    
+    ' Пробуем получить даты
+    On Error Resume Next
+    startDate = CDate(wsData.Cells(rowNum, startCol).Value)
+    endDate = CDate(wsData.Cells(rowNum, endCol).Value)
+    On Error GoTo 0
+    
+    ' Если даты валидны
+    If startDate > 0 And endDate > 0 And endDate >= startDate Then
+        ' Рассчитываем количество дней
+        daysCount = DateDiff("d", startDate, endDate) + 1
+        wsData.Cells(rowNum, daysCol).Value = daysCount
+        
+        ' Закрашиваем дни в графике
+        currentDate = startDate
+        Do While currentDate <= endDate
+            colNum = FindDateColumn(wsGraph, currentDate)
+            
+            If colNum > 0 Then
+                With wsGraph.Cells(rowNum, colNum)
+                    .Value = "О"
+                    .Interior.Color = RGB(144, 238, 144) ' Светло-зеленый
+                    .Font.Bold = True
+                    .Font.Color = RGB(0, 100, 0) ' Темно-зеленый
+                    .HorizontalAlignment = xlCenter
+                    .VerticalAlignment = xlCenter
+                End With
+            End If
+            
+            currentDate = DateAdd("d", 1, currentDate)
+        Loop
+    Else
+        ' Очищаем поле с днями, если даты не валидны
+        wsData.Cells(rowNum, daysCol).ClearContents
+    End If
+End Sub
+
+' ПОИСК СТОЛБЦА С ДАТОЙ В ГРАФИКЕ
+Private Function FindDateColumn(ws As Worksheet, searchDate As Date) As Long
+    Dim col As Long
+    Dim cellValue As Variant
+    
+    For col = 3 To ws.Columns.Count
+        cellValue = ws.Cells(2, col).Value
+        
+        ' Проверяем, что в ячейке число (день месяца)
+        If IsNumeric(cellValue) Then
+            ' Восстанавливаем полную дату
+            Dim cellDate As Date
+            Dim firstDate As Date
+            
+            ' Первая дата в графике - 01.01.2026 в столбце C
+            firstDate = DateSerial(2026, 1, 1)
+            cellDate = DateAdd("d", col - 3, firstDate)
+            
+            ' Сравниваем с искомой датой
+            If Year(cellDate) = Year(searchDate) And _
+               Month(cellDate) = Month(searchDate) And _
+               Day(cellDate) = Day(searchDate) Then
+                FindDateColumn = col
+                Exit Function
+            End If
+        End If
+    Next col
+    
+    FindDateColumn = 0 ' Дата не найдена
+End Function
+
+' РАСЧЕТ ИТОГОВЫХ ДНЕЙ ОТПУСКА
+Private Sub CalculateTotals(ws As Worksheet)
+    Dim lastRow As Long
+    Dim totalDays As Long
+    Dim i As Long
+    
+    lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+    
+    ' Суммируем все дни отпусков
+    totalDays = 0
+    
+    For i = 2 To lastRow
+        If IsNumeric(ws.Cells(i, 5).Value) Then totalDays = totalDays + ws.Cells(i, 5).Value
+        If IsNumeric(ws.Cells(i, 8).Value) Then totalDays = totalDays + ws.Cells(i, 8).Value
+        If IsNumeric(ws.Cells(i, 11).Value) Then totalDays = totalDays + ws.Cells(i, 11).Value
+    Next i
+    
+    ' Выводим итог
+    ws.Cells(lastRow + 1, 1).Value = "ИТОГО дней отпуска:"
+    ws.Cells(lastRow + 1, 1).Font.Bold = True
+    
+    ws.Cells(lastRow + 1, 5).Value = totalDays
+    ws.Cells(lastRow + 1, 5).Font.Bold = True
+    ws.Cells(lastRow + 1, 5).HorizontalAlignment = xlRight
+End Sub
+
+' ПРОСТОЙ ТЕСТОВЫЙ МАКРОС
+Public Sub TestMacro()
+    MsgBox "Макрос работает! Теперь запустите UpdateSchedule.", vbInformation, "Тест"
+End Sub
