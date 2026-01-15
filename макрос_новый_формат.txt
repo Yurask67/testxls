@@ -1,0 +1,179 @@
+Option Explicit
+' УЛУЧШЕННЫЙ МАКРОС ДЛЯ ГРАФИКА ОТПУСКОВ (НОВЫЙ ФОРМАТ)
+' ИГНОРИРУЕТ ПУСТЫЕ СТРОКИ, РАБОТАЕТ С 10 ОТПУСКАМИ НА СОТРУДНИКА
+
+Public Sub ОбновитьГрафик()
+    Dim wsСотрудники As Worksheet
+    Dim wsГрафик As Worksheet
+    Dim i As Long, j As Long
+    Dim датаНачало As Date
+    Dim датаКонец As Date
+    Dim текущаяДата As Date
+    Dim найденныйСтолбец As Long
+    Dim обработаноСотрудников As Integer
+    Dim обработаноОтпусков As Integer
+    Dim вакантныхМест As Integer
+    
+    Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual
+    
+    On Error GoTo ОшибкаОбработки
+    
+    Set wsСотрудники = ThisWorkbook.Worksheets("СОТРУДНИКИ")
+    Set wsГрафик = ThisWorkbook.Worksheets("ГРАФИК")
+    
+    ' 1. ОЧИСТКА СТАРЫХ ДАННЫХ В ГРАФИКЕ
+    Call ОчиститьСтарыйГрафик(wsГрафик)
+    
+    ' 2. ОБРАБОТКА СОТРУДНИКОВ (начиная со строки 4)
+    обработаноСотрудников = 0
+    обработаноОтпусков = 0
+    вакантныхМест = 20
+    
+    For i = 4 To 23 ' Обрабатываем все зарезервированные строки
+        ' ПРОВЕРКА: если ФИО пустое - пропускаем сотрудника
+        If Trim(wsСотрудники.Cells(i, 2).Value) = "" Then
+            ' Пустая строка - вакантное место
+        Else
+            ' ОБРАБАТЫВАЕМ СОТРУДНИКА С ДАННЫМИ
+            обработаноСотрудников = обработаноСотрудников + 1
+            вакантныхМест = вакантныхМест - 1
+            
+            ' Копируем ФИО в график (строка в графике = i)
+            wsГрафик.Cells(i, 2).Value = wsСотрудники.Cells(i, 2).Value
+            
+            ' ОБРАБАТЫВАЕМ ВСЕ ОТПУСКИ СОТРУДНИКА
+            For j = 1 To 10
+                Dim столбецНачало As Long
+                Dim столбецКонец As Long
+                
+                столбецНачало = 2 + (j - 1) * 2 + 1 ' C, E, G, ...
+                столбецКонец = столбецНачало + 1    ' D, F, H, ...
+                
+                Call ОбработатьОтпуск(wsСотрудники, wsГрафик, i, столбецНачало, столбецКонец, i)
+                
+                ' Считаем обработанные отпуска
+                If wsСотрудники.Cells(i, столбецНачало).Value <> "" And _
+                   wsСотрудники.Cells(i, столбецКонец).Value <> "" Then
+                    обработаноОтпусков = обработаноОтпусков + 1
+                End If
+            Next j
+        End If
+    Next i
+    
+    ' 3. АВТОПОДБОР ШИРИНЫ СТОЛБЦОВ
+    wsГрафик.Columns.AutoFit
+    
+    Application.ScreenUpdating = True
+    Application.Calculation = xlCalculationAutomatic
+    
+    ' 4. ИНФОРМАЦИОННОЕ СООБЩЕНИЕ
+    Dim сообщение As String
+    сообщение = "График отпусков успешно обновлен!" & vbCrLf & vbCrLf
+    сообщение = сообщение & "Обработано сотрудников: " & обработаноСотрудников & vbCrLf
+    сообщение = сообщение & "Обработано отпусков: " & обработаноОтпусков & vbCrLf
+    сообщение = сообщение & "Вакантных мест: " & вакантныхМест & " из " & 20
+    
+    MsgBox сообщение, vbInformation, "Обновление завершено"
+    Exit Sub
+    
+ОшибкаОбработки:
+    Application.ScreenUpdating = True
+    Application.Calculation = xlCalculationAutomatic
+    MsgBox "Ошибка при обновлении графика:" & vbCrLf & Err.Description, vbCritical, "Ошибка"
+End Sub
+
+Private Sub ОчиститьСтарыйГрафик(ws As Worksheet)
+    Dim последнийСтолбец As Long
+    Dim i As Long, j As Long
+    
+    последнийСтолбец = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
+    Dim последняяСтрока As Long
+    последняяСтрока = 23 ' Все строки сотрудников
+    
+    If последнийСтолбец > 2 Then
+        For i = 4 To последняяСтрока ' Строки с сотрудниками
+            For j = 3 To последнийСтолбец
+                With ws.Cells(i, j)
+                    .ClearContents
+                    .Interior.ColorIndex = xlNone
+                    .Font.ColorIndex = xlAutomatic
+                    .Font.Bold = False
+                End With
+            Next j
+        Next i
+    End If
+End Sub
+
+Private Sub ОбработатьОтпуск(wsДанные As Worksheet, wsГрафик As Worksheet, _
+                            строкаДанных As Long, столбецНачало As Long, _
+                            столбецКонец As Long, строкаГрафика As Long)
+    Dim датаНачало As Date
+    Dim датаКонец As Date
+    Dim текущаяДата As Date
+    Dim номерСтолбца As Long
+    
+    On Error Resume Next
+    датаНачало = CDate(wsДанные.Cells(строкаДанных, столбецНачало).Value)
+    датаКонец = CDate(wsДанные.Cells(строкаДанных, столбецКонец).Value)
+    On Error GoTo 0
+    
+    ' ПРОВЕРКА ВАЛИДНОСТИ ДАТ
+    If IsDate(датаНачало) And IsDate(датаКонец) Then
+        If датаКонец >= датаНачало Then
+            ' ЦВЕТ ДЛЯ ОТПУСКА (светло-зеленый)
+            Dim цветОтпуска As Long
+            цветОтпуска = RGB(144, 238, 144)
+            
+            ' ОТМЕТКА ОТПУСКА В ГРАФИКЕ
+            текущаяДата = датаНачало
+            Do While текущаяДата <= датаКонец
+                номерСтолбца = НайтиСтолбецПоДате(wsГрафик, текущаяДата)
+                
+                If номерСтолбца > 0 Then
+                    With wsГрафик.Cells(строкаГрафика, номерСтолбца)
+                        .Value = "О"
+                        .Interior.Color = цветОтпуска
+                        .Font.Bold = True
+                        .Font.Color = RGB(0, 100, 0)
+                        .HorizontalAlignment = xlCenter
+                        .VerticalAlignment = xlCenter
+                    End With
+                End If
+                
+                текущаяДата = DateAdd("d", 1, текущаяДата)
+            Loop
+        End If
+    End If
+End Sub
+
+Private Function НайтиСтолбецПоДате(ws As Worksheet, искомаяДата As Date) As Long
+    Dim col As Long
+    Dim последнийСтолбец As Long
+    
+    последнийСтолбец = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
+    
+    For col = 3 To последнийСтолбец
+        ' ИЩЕМ В СКРЫТОЙ СТРОКЕ 5 (там полные даты)
+        If ws.Cells(5, col).Value <> "" Then
+            If IsDate(ws.Cells(5, col).Value) Then
+                Dim датаВЯчейке As Date
+                датаВЯчейке = CDate(ws.Cells(5, col).Value)
+                
+                ' СРАВНИВАЕМ ДАТЫ
+                If Year(датаВЯчейке) = Year(искомаяДата) And _
+                   Month(датаВЯчейке) = Month(искомаяДата) And _
+                   Day(датаВЯчейке) = Day(искомаяДата) Then
+                    НайтиСтолбецПоДате = col
+                    Exit Function
+                End If
+            End If
+        End If
+    Next col
+    
+    НайтиСтолбецПоДате = 0 ' Дата не найдена
+End Function
+
+Public Sub ТестМакроса()
+    MsgBox "Макрос готов к работе! Запустите 'ОбновитьГрафик'.", vbInformation, "Тест"
+End Sub
