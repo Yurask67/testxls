@@ -1,0 +1,185 @@
+Option Explicit
+' МАКРОС ДЛЯ ОБНОВЛЕНИЯ ГРАФИКА ОТПУСКОВ
+' РАБОТАЕТ С ИСПРАВЛЕННОЙ СТРУКТУРОЙ ФАЙЛА
+
+Public Sub ОбновитьГрафик()
+    Dim wsData As Worksheet
+    Dim wsGraph As Worksheet
+    Dim lastRow As Long
+    Dim i As Long, col As Long
+    Dim startDate As Date
+    Dim endDate As Date
+    Dim currentDate As Date
+    Dim targetCol As Long
+    Dim daysCount As Long
+    
+    Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual
+    
+    On Error GoTo ErrorHandler
+    
+    Set wsData = ThisWorkbook.Worksheets("СОТРУДНИКИ")
+    Set wsGraph = ThisWorkbook.Worksheets("ГРАФИК")
+    
+    ' 1. Очищаем старые отпуска (начиная со строки 5, столбцы C и дальше)
+    Call ОчиститьОтпуска(wsGraph)
+    
+    ' 2. Находим последнего сотрудника
+    lastRow = wsData.Cells(wsData.Rows.Count, 1).End(xlUp).Row
+    
+    ' 3. Цвет для отпусков
+    Dim vacationColor As Long
+    vacationColor = RGB(144, 238, 144) ' Светло-зеленый
+    
+    ' 4. Обрабатываем каждого сотрудника
+    For i = 2 To lastRow
+        If wsData.Cells(i, 2).Value <> "" Then
+            ' Первый отпуск (столбцы 3-5)
+            Call ОбработатьОтпускСотрудника(wsData, wsGraph, i, 3, 4, 5, i + 3, vacationColor)
+            
+            ' Второй отпуск (столбцы 6-8)
+            Call ОбработатьОтпускСотрудника(wsData, wsGraph, i, 6, 7, 8, i + 3, vacationColor)
+            
+            ' Третий отпуск (столбцы 9-11)
+            Call ОбработатьОтпускСотрудника(wsData, wsGraph, i, 9, 10, 11, i + 3, vacationColor)
+        End If
+    Next i
+    
+    ' 5. Обновляем итоги
+    Call ОбновитьИтоги(wsData)
+    
+    ' 6. Автоподбор ширины
+    wsGraph.Columns.AutoFit
+    
+    Application.ScreenUpdating = True
+    Application.Calculation = xlCalculationAutomatic
+    
+    MsgBox "График отпусков обновлен!", vbInformation
+    Exit Sub
+    
+ErrorHandler:
+    Application.ScreenUpdating = True
+    Application.Calculation = xlCalculationAutomatic
+    MsgBox "Ошибка: " & Err.Description, vbCritical
+End Sub
+
+Private Sub ОчиститьОтпуска(ws As Worksheet)
+    Dim lastCol As Long
+    Dim lastRow As Long
+    Dim i As Long, j As Long
+    
+    lastCol = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
+    lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+    
+    If lastCol > 2 Then
+        For i = 5 To lastRow ' Строки сотрудников начинаются с 5
+            For j = 3 To lastCol
+                With ws.Cells(i, j)
+                    .ClearContents
+                    .Interior.ColorIndex = xlNone
+                    .Font.ColorIndex = xlAutomatic
+                    .Font.Bold = False
+                End With
+            Next j
+        Next i
+    End If
+End Sub
+
+Private Sub ОбработатьОтпускСотрудника(wsData As Worksheet, wsGraph As Worksheet, _
+                                      dataRow As Long, startCol As Long, _
+                                      endCol As Long, daysCol As Long, _
+                                      graphRow As Long, color As Long)
+    Dim startDate As Date
+    Dim endDate As Date
+    Dim currentDate As Date
+    Dim foundCol As Long
+    Dim daysCount As Long
+    
+    On Error Resume Next
+    startDate = CDate(wsData.Cells(dataRow, startCol).Value)
+    endDate = CDate(wsData.Cells(dataRow, endCol).Value)
+    On Error GoTo 0
+    
+    If IsDate(startDate) And IsDate(endDate) Then
+        If endDate >= startDate Then
+            ' Считаем дни
+            daysCount = DateDiff("d", startDate, endDate) + 1
+            wsData.Cells(dataRow, daysCol).Value = daysCount
+            
+            ' Отмечаем в графике
+            currentDate = startDate
+            Do While currentDate <= endDate
+                foundCol = НайтиСтолбецПоДате(wsGraph, currentDate)
+                
+                If foundCol > 0 Then
+                    With wsGraph.Cells(graphRow, foundCol)
+                        .Value = "О"
+                        .Interior.Color = color
+                        .Font.Bold = True
+                        .Font.Color = RGB(0, 100, 0)
+                        .HorizontalAlignment = xlCenter
+                        .VerticalAlignment = xlCenter
+                    End With
+                End If
+                
+                currentDate = DateAdd("d", 1, currentDate)
+            Loop
+        Else
+            wsData.Cells(dataRow, daysCol).Value = "Ошибка"
+        End If
+    Else
+        wsData.Cells(dataRow, daysCol).ClearContents
+    End If
+End Sub
+
+Private Function НайтиСтолбецПоДате(ws As Worksheet, searchDate As Date) As Long
+    Dim col As Long
+    Dim lastCol As Long
+    
+    lastCol = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
+    
+    For col = 3 To lastCol
+        ' Проверяем скрытую строку 4 с полными датами
+        If ws.Cells(4, col).Value <> "" Then
+            If IsDate(ws.Cells(4, col).Value) Then
+                Dim cellDate As Date
+                cellDate = CDate(ws.Cells(4, col).Value)
+                
+                If Year(cellDate) = Year(searchDate) And _
+                   Month(cellDate) = Month(searchDate) And _
+                   Day(cellDate) = Day(searchDate) Then
+                    НайтиСтолбецПоДате = col
+                    Exit Function
+                End If
+            End If
+        End If
+    Next col
+    
+    НайтиСтолбецПоДате = 0
+End Function
+
+Private Sub ОбновитьИтоги(ws As Worksheet)
+    Dim lastRow As Long
+    Dim totalDays As Long
+    Dim i As Long
+    
+    lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+    
+    totalDays = 0
+    For i = 2 To lastRow
+        If IsNumeric(ws.Cells(i, 5).Value) Then totalDays = totalDays + ws.Cells(i, 5).Value
+        If IsNumeric(ws.Cells(i, 8).Value) Then totalDays = totalDays + ws.Cells(i, 8).Value
+        If IsNumeric(ws.Cells(i, 11).Value) Then totalDays = totalDays + ws.Cells(i, 11).Value
+    Next i
+    
+    ws.Cells(lastRow + 1, 1).Value = "ИТОГО дней отпуска:"
+    ws.Cells(lastRow + 1, 1).Font.Bold = True
+    
+    ws.Cells(lastRow + 1, 5).Value = totalDays
+    ws.Cells(lastRow + 1, 5).Font.Bold = True
+    ws.Cells(lastRow + 1, 5).HorizontalAlignment = xlRight
+End Sub
+
+Public Sub Тест()
+    MsgBox "Макрос работает! Запустите 'ОбновитьГрафик'", vbInformation
+End Sub
