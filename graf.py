@@ -1,7 +1,7 @@
 """
 Генератор графика отпусков в Excel с VBA макросом для автоматического обновления
 
-ВАЖНЫЙ ПРОМПТ ДЛЯ КОНТЕКСТА ПРЕДЫДУЩИХ ЧАТОВ:
+ВАЖНЫЙ ПРОМПТ ДЛЯ КОНТЕКСТА ПРЕДЫДУЩИХ ЧАТОВ (должен сохраняться при передаче в новый чат):
 --------------------------------------------------------------------------------
 Этот Python скрипт создает Excel файл для планирования отпусков сотрудников на 2026 год
 с VBA макросом для автоматического обновления графика.
@@ -17,6 +17,8 @@
    - Строки 5-24: данные 20 сотрудников
    - Календарь начинается с колонки C
    - Дни отпуска отмечаются буквой "О" на светло-зеленом фоне (RGB(198, 239, 206))
+   - Производственный календарь России на 2026 год корректно отображен
+   - Чередование цветов месяцев: только заголовки месяцев (строка 1) и область данных (строки 5-24)
 3. Лист "ДАТЫ" - служебный скрытый лист с датами для работы макроса
 4. Лист "ЛЕГЕНДА" и "ИНСТРУКЦИЯ" - пояснительные листы
 5. VBA макрос в отдельном файле .txt для автоматического обновления графика
@@ -26,10 +28,10 @@
 - Данные сотрудников начинаются с строки 5 (строка 4 - только заголовки столбцов)
 - VBA макрос корректно рассчитывает строки: scheduleRow = employeeCount + 4
 - Очистка графика начинается со строки 5
+- Производственный календарь 2026 года исправлен
 
-ТЕКУЩАЯ ЗАДАЧА:
-- Исправить производственный календарь 2026 года в России
-- Только график (лист "ГРАФИК"), ничего больше не менять
+ВАЖНО: При переносе задачи в новый чат этот промпт должен сохраняться в начале файла
+для понимания контекста. Текущие задачи добавляются в конец промпта отдельным блоком.
 --------------------------------------------------------------------------------
 """
 
@@ -245,7 +247,7 @@ class VacationScheduleGenerator:
         print("  ✓ Лист 'СОТРУДНИКИ' создан")
     
     def _create_schedule_sheet(self, ws):
-        """Создание листа ГРАФИК с исправленным производственным календарем"""
+        """Создание листа ГРАФИК с чередованием цветов месяцев ТОЛЬКО для области данных"""
         print("  Создание листа 'ГРАФИК'...")
         
         # Настраиваем ширину
@@ -281,9 +283,19 @@ class VacationScheduleGenerator:
             'рабочая суббота': '99FF99', # Зеленый
         }
         
+        # Цвета для чередования месяцев (светло-серый и белый)
+        month_colors = ['F8F8F8', 'FFFFFF']  # Чередующиеся цвета для месяцев
+        
         # Создаем заголовки календаря (строки 1-3)
-        for month in range(1, 13):
+        month_start_cols = []  # Для хранения начала каждого месяца
+        month_color_indices = []  # Для хранения цветовых индексов месяцев
+        
+        for month_idx, month in enumerate(range(1, 13)):
             days_in_month = calendar.monthrange(self.year, month)[1]
+            
+            # Сохраняем информацию о начале месяца
+            month_start_cols.append(current_col)
+            month_color_indices.append(month_idx % 2)
             
             # Объединяем ячейки для названия месяца (СТРОКА 1)
             start_col = current_col
@@ -294,23 +306,27 @@ class VacationScheduleGenerator:
                 end_row=1, end_column=end_col
             )
             
+            # ТОЛЬКО заголовок месяца получает чередующийся цвет
+            month_color = month_colors[month_idx % 2]  # Чередование цветов
+            month_fill = PatternFill(start_color=month_color, end_color=month_color, fill_type="solid")
+            
             month_cell = ws.cell(row=1, column=start_col, value=month_names[month-1])
             month_cell.alignment = Alignment(horizontal="center", vertical="center")
             month_cell.font = Font(bold=True, size=11)
-            month_cell.fill = PatternFill(start_color="E6E6E6", fill_type="solid")
+            month_cell.fill = month_fill  # Только заголовок месяца получает чередующийся цвет
             
-            # Заполняем числа (СТРОКА 2) и дни недели (СТРОКА 3)
+            # Заполняем числа (СТРОКА 2) и дни недели (СТРОКА 3) - БЕЗ чередующегося цвета
             for day in range(1, days_in_month + 1):
                 col = current_col + day - 1
                 date_obj = datetime.date(self.year, month, day)
                 day_info = self.calendar.get_day_info(date_obj)
                 
-                # Число месяца (СТРОКА 2)
+                # Число месяца (СТРОКА 2) - БЕЗ чередующегося цвета месяца
                 day_cell = ws.cell(row=2, column=col, value=day)
                 day_cell.alignment = Alignment(horizontal="center", vertical="center")
                 day_cell.font = Font(size=9)
                 
-                # День недели + символ (СТРОКА 3)
+                # День недели + символ (СТРОКА 3) - БЕЗ чередующегося цвета месяца
                 day_name = day_names[date_obj.weekday()]
                 
                 # Добавляем символ для особых дней согласно производственному календарю
@@ -329,8 +345,9 @@ class VacationScheduleGenerator:
                 weekday_cell.alignment = Alignment(horizontal="center", vertical="center")
                 weekday_cell.font = Font(size=8)
                 
-                # Устанавливаем цвет фона согласно типу дня
-                fill_color = colors['рабочий']
+                # Устанавливаем цвет фона для строк 2-3 согласно типу дня
+                fill_color = colors['рабочий']  # По умолчанию белый
+                
                 if day_info:
                     if day_info.day_type == 'праздник':
                         fill_color = colors['праздник']
@@ -338,15 +355,37 @@ class VacationScheduleGenerator:
                         fill_color = colors['выходной']
                     elif day_info.day_type == 'рабочая суббота':
                         fill_color = colors['рабочая суббота']
+                    # Для рабочих дней оставляем белый цвет
                 
-                fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
-                day_cell.fill = fill
-                weekday_cell.fill = fill
+                day_fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
+                day_cell.fill = day_fill
+                weekday_cell.fill = day_fill
                 
                 # Узкие колонки для дней
                 ws.column_dimensions[get_column_letter(col)].width = 3.5
             
             current_col += days_in_month
+        
+        # Применяем чередование цветов ТОЛЬКО к области данных (строки 5+) 
+        # ИСПРАВЛЕНИЕ: Сохраняем информацию о цветах месяцев для VBA макроса
+        data_start_row = 5  # Данные сотрудников начинаются с строки 5
+        data_end_row = data_start_row + self.max_employees - 1  # Строка 24
+        
+        # Применяем цвет месяца ко всем ячейкам этого месяца в строках данных
+        col = 3  # Начинаем с колонки C
+        for month_idx, month in enumerate(range(1, 13)):
+            days_in_month = calendar.monthrange(self.year, month)[1]
+            
+            # Получаем цвет для этого месяца
+            month_color = month_colors[month_idx % 2]
+            month_fill = PatternFill(start_color=month_color, end_color=month_color, fill_type="solid")
+            
+            # Применяем цвет месяца ко всем ячейкам этого месяца в строках данных
+            for day in range(1, days_in_month + 1):
+                for row in range(data_start_row, data_end_row + 1):
+                    cell = ws.cell(row=row, column=col)
+                    cell.fill = month_fill
+                col += 1
         
         # Добавляем строки для сотрудников (начинаем с СТРОКИ 5)
         for i in range(1, self.max_employees + 1):
@@ -384,7 +423,7 @@ class VacationScheduleGenerator:
         footer.font = Font(italic=True, size=10, color="666666")
         footer.alignment = Alignment(horizontal="center")
         
-        print(f"  ✓ Лист 'ГРАФИК' создан с исправленным производственным календарем ({current_col-3} дней)")
+        print(f"  ✓ Лист 'ГРАФИК' создан с чередованием цветов месяцев ТОЛЬКО в области данных ({current_col-3} дней)")
     
     def _create_dates_sheet(self, ws):
         """Создание служебного листа с датами"""
@@ -502,16 +541,27 @@ class VacationScheduleGenerator:
         print("  ✓ Лист 'ИНСТРУКЦИЯ' создан")
     
     def create_vba_macro_file(self):
-        """Создание файла с VBA макросом"""
+        """Создание файла с VBA макросом (ИСПРАВЛЕННЫЙ - сохраняет чередование цветов месяцев)"""
         print("\nСоздание файла с VBA макросом...")
         
         vba_code = '''Option Explicit
 
 Public Const MAX_EMPLOYEES As Integer = 20
 
+' Цвета для чередования месяцев
+Private Const COLOR_MONTH_1 As Long = &HF8F8F8     ' Светло-серый
+Private Const COLOR_MONTH_2 As Long = &HFFFFFF     ' Белый
+
+' Дни в месяцах 2026 года
+Private Const DAYS_IN_MONTHS As String = "31,29,31,30,31,30,31,31,30,31,30,31"
+
+' Цвет для отпуска
+Private Const VACATION_COLOR As Long = &HC6EFCE    ' Светло-зеленый
+
 Sub ОбновитьГрафик()
     ' Макрос для обновления графика отпусков
     ' Считывает данные с листа СОТРУДНИКИ и заполняет лист ГРАФИК
+    ' СОХРАНЯЕТ чередование цветов месяцев в области данных
     
     Dim wsEmployees As Worksheet
     Dim wsSchedule As Worksheet
@@ -550,8 +600,8 @@ Sub ОбновитьГрафик()
     Set wsSchedule = ThisWorkbook.Worksheets("ГРАФИК")
     Set wsService = ThisWorkbook.Worksheets("ДАТЫ")
     
-    ' Очищаем предыдущий график
-    Call ОчиститьГрафик(wsSchedule)
+    ' Очищаем предыдущий график (НО сохраняем цвет фона)
+    Call ОчиститьГрафикСФорматированием(wsSchedule)
     
     ' Находим последнюю строку с данными на листе СОТРУДНИКИ
     lastRow = wsEmployees.Cells(wsEmployees.Rows.Count, "B").End(xlUp).Row
@@ -571,6 +621,9 @@ Sub ОбновитьГрафик()
             ' Копируем табельный номер и ФИО на лист ГРАФИК
             wsSchedule.Cells(scheduleRow, 1).Value = wsEmployees.Cells(i, 1).Value
             wsSchedule.Cells(scheduleRow, 2).Value = wsEmployees.Cells(i, 2).Value
+            
+            ' Восстанавливаем чередование цветов месяцев для этой строки
+            Call ВосстановитьЦветаМесяцев(wsSchedule, scheduleRow)
             
             ' Обрабатываем периоды отпусков (максимум 10 периодов)
             periodCount = 0
@@ -607,10 +660,10 @@ Sub ОбновитьГрафик()
                                         If Not foundDate Is Nothing Then
                                             dateCol = foundDate.Column
                                             
-                                            ' Заполняем ячейку на графике
+                                            ' Заполняем ячейку на графике (ЦВЕТ НАКЛАДЫВАЕТСЯ ПОВЕРХ цвета месяца)
                                             With wsSchedule.Cells(scheduleRow, dateCol)
                                                 .Value = "О"  ' Буква О - отпуск
-                                                .Interior.Color = RGB(198, 239, 206)  ' Светло-зеленый
+                                                .Interior.Color = VACATION_COLOR  ' Светло-зеленый
                                                 .Font.Bold = True
                                                 .Font.Name = "Arial"
                                                 .Font.Size = 9
@@ -641,7 +694,8 @@ Sub ОбновитьГрафик()
     ' Показываем информационное сообщение
     MsgBox "График отпусков успешно обновлен!" & vbCrLf & _
            "Обработано сотрудников: " & employeeCount & vbCrLf & _
-           "Найдено периодов отпуска: " & vacationCount, _
+           "Найдено периодов отпуска: " & vacationCount & vbCrLf & _
+           "Чередование цветов месяцев сохранено.", _
            vbInformation + vbOKOnly, _
            "Обновление графика отпусков"
     
@@ -658,7 +712,7 @@ ErrorHandler:
     Application.EnableEvents = True
     
     ' Показываем сообщение об ошибке
-    MsgBox "Произошла ошибка при обновлении графика!" & vbCrLf & _
+    MsgBox "Произошла ошибка при обновления графика!" & vbCrLf & _
            "Код ошибки: " & Err.Number & vbCrLf & _
            "Описание: " & Err.Description & vbCrLf & _
            "Проверьте:" & vbCrLf & _
@@ -669,8 +723,8 @@ ErrorHandler:
            "Ошибка обновления графика"
 End Sub
 
-Private Sub ОчиститьГрафик(wsSchedule As Worksheet)
-    ' Очистка данных на листе ГРАФИК (сохраняет заголовки календаря)
+Private Sub ОчиститьГрафикСФорматированием(wsSchedule As Worksheet)
+    ' Очистка данных на листе ГРАФИК (сохраняет цвета месяцев)
     
     Dim lastRow As Long
     Dim lastCol As Long
@@ -689,21 +743,58 @@ Private Sub ОчиститьГрафик(wsSchedule As Worksheet)
         
         ' Очищаем отметки об отпусках (начиная с колонки C, строки 5 и ниже)
         If lastCol >= 3 Then
-            ' Очищаем содержимое
-            wsSchedule.Range(wsSchedule.Cells(5, 3), wsSchedule.Cells(lastRow, lastCol)).ClearContents
-            
-            ' Сбрасываем форматирование (цвет и жирный шрифт)
+            ' Очищаем содержимое, НО НЕ форматирование
             For i = 5 To lastRow
                 For j = 3 To lastCol
                     With wsSchedule.Cells(i, j)
-                        .Interior.ColorIndex = xlNone
+                        .Value = ""  ' Очищаем только значение
                         .Font.Bold = False
-                        .Font.ColorIndex = xlAutomatic
                     End With
                 Next j
             Next i
+            
+            ' Восстанавливаем цвета месяцев для всех строк данных
+            For i = 5 To lastRow
+                Call ВосстановитьЦветаМесяцев(wsSchedule, i)
+            Next i
         End If
     End If
+End Sub
+
+Private Sub ВосстановитьЦветаМесяцев(wsSchedule As Worksheet, rowNum As Long)
+    ' Восстанавливает чередование цветов месяцев для указанной строки
+    
+    Dim monthDays() As String
+    Dim i As Long, j As Long
+    Dim col As Long
+    Dim monthColor As Long
+    Dim daysInMonth As Integer
+    
+    ' Разбиваем строку с днями в месяцах
+    monthDays = Split(DAYS_IN_MONTHS, ",")
+    
+    ' Начинаем с колонки C (3)
+    col = 3
+    
+    ' Проходим по всем месяцам
+    For i = 0 To UBound(monthDays)
+        daysInMonth = CInt(monthDays(i))
+        
+        ' Определяем цвет для месяца (чередование)
+        If (i Mod 2) = 0 Then
+            monthColor = COLOR_MONTH_1  ' Нечетные месяцы: светло-серый
+        Else
+            monthColor = COLOR_MONTH_2  ' Четные месяцы: белый
+        End If
+        
+        ' Применяем цвет ко всем дням месяца в указанной строке
+        For j = 1 To daysInMonth
+            With wsSchedule.Cells(rowNum, col)
+                .Interior.Color = monthColor
+            End With
+            col = col + 1
+        Next j
+    Next i
 End Sub
 
 Sub ТестовыеДанные()
@@ -789,11 +880,14 @@ def main():
         print("✓ ФАЙЛЫ УСПЕШНО СОЗДАНЫ")
         print(f"  • Excel файл: {excel_file}")
         print(f"  • Файл макроса: {macro_file}")
-        print("\nПроизводственный календарь 2026 года исправлен в листе 'ГРАФИК'")
-        print("Структура листа 'ГРАФИК':")
-        print("  • Строки 1-3: Заголовки календаря (месяцы, числа, дни недели)")
-        print("  • Строка 4: Заголовки столбцов данных ('№', 'ФИО СОТРУДНИКА')")
-        print("  • Строки 5-24: Данные 20 сотрудников")
+        print("\nВАЖНОЕ ИСПРАВЛЕНИЕ В VBA МАКРОСЕ:")
+        print("  • Теперь при обновлении графика сохраняется чередование цветов месяцев")
+        print("  • Цвета месяцев восстановлены в процедуре ВосстановитьЦветаМесяцев")
+        print("  • Цвет отпуска (светло-зеленый) накладывается ПОВЕРХ цвета месяца")
+        print("  • После очистки данных автоматически восстанавливается фон месяцев")
+        print("\nЧередование цветов месяцев:")
+        print("  • Нечетные месяцы (Янв, Мар, Май, Июл, Сен, Ноя): светло-серый (F8F8F8)")
+        print("  • Четные месяцы (Фев, Апр, Июн, Авг, Окт, Дек): белый (FFFFFF)")
         print("=" * 70)
     else:
         print("✗ ОШИБКА! Не удалось создать файлы.")
