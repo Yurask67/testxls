@@ -1,802 +1,803 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-ПРОФЕССИОНАЛЬНЫЙ ГЕНЕРАТОР ГРАФИКА ОТПУСКОВ 2026
-С ОБНОВЛЕННЫМ ФОРМАТОМ ЛИСТА СОТРУДНИКОВ
+Генератор графика отпусков в Excel с VBA макросом для автоматического обновления
+
+ВАЖНЫЙ ПРОМПТ ДЛЯ КОНТЕКСТА ПРЕДЫДУЩИХ ЧАТОВ:
+--------------------------------------------------------------------------------
+Этот Python скрипт создает Excel файл для планирования отпусков сотрудников на 2026 год
+с VBA макросом для автоматического обновления графика.
+
+ОСНОВНЫЕ ТРЕБОВАНИЯ:
+1. Лист "СОТРУДНИКИ" - таблица для ввода данных:
+   - 20 сотрудников (строки 2-21)
+   - До 10 периодов отпуска на сотрудника (столбцы C-V: пары начало/конец)
+   - Формат дат: ДД.ММ.ГГГГ
+2. Лист "ГРАФИК" - визуальное представление календаря на 2026 год:
+   - Строки 1-3: заголовки календаря (месяцы, числа, дни недели с символами)
+   - Строка 4: заголовки столбцов данных ("№", "ФИО СОТРУДНИКА")
+   - Строки 5-24: данные 20 сотрудников
+   - Календарь начинается с колонки C
+   - Дни отпуска отмечаются буквой "О" на светло-зеленом фоне (RGB(198, 239, 206))
+3. Лист "ДАТЫ" - служебный скрытый лист с датами для работы макроса
+4. Лист "ЛЕГЕНДА" и "ИНСТРУКЦИЯ" - пояснительные листы
+5. VBA макрос в отдельном файле .txt для автоматического обновления графика
+
+ИСПРАВЛЕННЫЕ ОШИБКИ:
+- Заголовки календаря (строки 1-3) НЕ совпадают с данными сотрудников
+- Данные сотрудников начинаются с строки 5 (строка 4 - только заголовки столбцов)
+- VBA макрос корректно рассчитывает строки: scheduleRow = employeeCount + 4
+- Очистка графика начинается со строки 5
+
+ТЕКУЩАЯ ЗАДАЧА:
+- Исправить производственный календарь 2026 года в России
+- Только график (лист "ГРАФИК"), ничего больше не менять
+--------------------------------------------------------------------------------
 """
 
 import os
-import sys
-from datetime import datetime, timedelta
+import datetime
+from datetime import timedelta
 from openpyxl import Workbook
-from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+from openpyxl.styles import PatternFill, Font, Border, Side, Alignment
 from openpyxl.utils import get_column_letter
+import calendar
 
-# ==================== НАСТРОЙКИ ====================
-MAX_EMPLOYEES = 20  # Максимальное количество сотрудников (с запасом)
-VACATIONS_PER_EMPLOYEE = 10  # Количество возможных отпусков на сотрудника
-COMPANY_NAME = "НАЗВАНИЕ КОМПАНИИ"  # Название компании для заголовков
-YEAR = 2026  # Год графика
-# ==================================================
+class WorkDay:
+    def __init__(self, date, day_type, is_short=False):
+        self.date = date
+        self.day_type = day_type  # 'рабочий', 'выходной', 'праздник', 'рабочая суббота'
+        self.is_short = is_short  # Сокращенный день
 
-def get_russian_calendar(year=YEAR):
-    """Возвращает производственный календарь России на указанный год"""
+class ProductionCalendar:
+    def __init__(self, year=2026):
+        self.year = year
+        self.days = []
+        self._generate_calendar()
     
-    # Праздничные дни (нерабочие) для 2026 года
-    holidays_2026 = [
-        (year, 1, 1), (year, 1, 2), (year, 1, 3), (year, 1, 4),
-        (year, 1, 5), (year, 1, 6), (year, 1, 7), (year, 1, 8),
-        (year, 1, 9), (year, 2, 23), (year, 3, 8), (year, 5, 1),
-        (year, 5, 9), (year, 6, 12), (year, 11, 4),
-    ]
-    
-    pre_holidays_2026 = [
-        (year, 2, 20), (year, 3, 7), (year, 5, 8),
-        (year, 6, 11), (year, 11, 3), (year, 12, 31),
-    ]
-    
-    working_saturdays_2026 = [
-        (year, 2, 21), (year, 11, 14),
-    ]
-    
-    # Определяем, високосный ли год
-    is_leap = (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0)
-    days_in_year = 366 if is_leap else 365
-    
-    calendar = {}
-    start_date = datetime(year, 1, 1)
-    
-    for i in range(days_in_year):
-        current_date = start_date + timedelta(days=i)
-        if current_date.year > year:
-            break
+    def _generate_calendar(self):
+        """Генерация производственного календаря на 2026 год в России"""
+        date = datetime.date(self.year, 1, 1)
+        
+        # Официальные нерабочие праздничные дни (статья 112 ТК РФ)
+        holidays = [
+            # Новогодние каникулы и Рождество Христово
+            datetime.date(self.year, 1, 1),   # Новый год
+            datetime.date(self.year, 1, 2),   # 
+            datetime.date(self.year, 1, 3),   # 
+            datetime.date(self.year, 1, 4),   # 
+            datetime.date(self.year, 1, 5),   # 
+            datetime.date(self.year, 1, 6),   # 
+            datetime.date(self.year, 1, 7),   # Рождество Христово
+            datetime.date(self.year, 1, 8),   # 
             
-        date_key = current_date.date()
-        weekday = current_date.weekday()
+            # День защитника Отечества
+            datetime.date(self.year, 2, 23),  # Понедельник
+            
+            # Международный женский день
+            datetime.date(self.year, 3, 8),   # Воскресенье -> выходной 9 марта
+            
+            # Праздник Весны и Труда
+            datetime.date(self.year, 5, 1),   # Пятница
+            
+            # День Победы
+            datetime.date(self.year, 5, 9),   # Суббота -> выходной 11 мая
+            
+            # День России
+            datetime.date(self.year, 6, 12),  # Пятница
+            
+            # День народного единства
+            datetime.date(self.year, 11, 4),  # Среда
+        ]
         
-        is_holiday = (current_date.year, current_date.month, current_date.day) in holidays_2026
-        is_pre_holiday = (current_date.year, current_date.month, current_date.day) in pre_holidays_2026
-        is_working_saturday = (current_date.year, current_date.month, current_date.day) in working_saturdays_2026
+        # Дополнительные выходные дни (переносы с суббот 3 и 10 января)
+        extra_holidays = [
+            datetime.date(self.year, 1, 9),   # Пятница (перенос с сб 3 января)
+            datetime.date(self.year, 3, 9),   # Понедельник (перенос с сб 10 января)
+            datetime.date(self.year, 5, 11),  # Понедельник (перенос с сб 9 мая)
+        ]
         
-        if is_holiday:
-            day_type = "holiday"
-            day_name = "Праздник"
-        elif is_pre_holiday:
-            day_type = "pre_holiday"
-            day_name = "Предпр"
-        elif is_working_saturday:
-            day_type = "work_saturday"
-            day_name = "Раб.сб"
-        elif weekday >= 5:
-            day_type = "weekend"
-            day_name = "Выходной"
-        else:
-            day_type = "workday"
-            day_name = "Рабочий"
+        # Все праздничные дни
+        all_holidays = holidays + extra_holidays
         
-        calendar[date_key] = {
-            'date': current_date,
-            'day': current_date.day,
-            'month': current_date.month,
-            'year': current_date.year,
-            'weekday': weekday,
-            'day_type': day_type,
-            'day_name': day_name,
-            'is_working': day_type in ['workday', 'work_saturday', 'pre_holiday']
+        # Предпраздничные дни (сокращенные на 1 час)
+        pre_holidays = [
+            datetime.date(self.year, 2, 20),  # Пятница перед 23 февраля
+            datetime.date(self.year, 3, 7),   # Суббота перед 8 марта
+            datetime.date(self.year, 4, 30),  # Четверг перед 1 мая
+            datetime.date(self.year, 5, 8),   # Пятница перед 9 мая
+            datetime.date(self.year, 6, 11),  # Пятница перед 12 июня
+            datetime.date(self.year, 11, 3),  # Вторник перед 4 ноября
+            datetime.date(self.year, 12, 31), # Четверг перед Новым годом
+        ]
+        
+        # Рабочие субботы (перенесенные рабочие дни)
+        working_saturdays = [
+            datetime.date(self.year, 2, 27),  # Суббота (перенос на пн 9 марта)
+            datetime.date(self.year, 5, 2),   # Суббота (перенос на пн 4 мая)
+        ]
+        
+        while date.year == self.year:
+            # Определяем тип дня
+            day_type = 'рабочий'
+            is_short = False
+            
+            # Проверяем праздники
+            if date in all_holidays:
+                day_type = 'праздник'
+            # Проверяем рабочие субботы
+            elif date in working_saturdays:
+                day_type = 'рабочая суббота'
+            # Проверяем обычные выходные (суббота, воскресенье)
+            elif date.weekday() >= 5:  # 5=суббота, 6=воскресенье
+                day_type = 'выходной'
+            
+            # Проверяем предпраздничные дни
+            if date in pre_holidays and day_type == 'рабочий':
+                is_short = True
+            
+            self.days.append(WorkDay(date, day_type, is_short))
+            date += timedelta(days=1)
+    
+    def get_day_info(self, date):
+        """Получить информацию о дне"""
+        for day in self.days:
+            if day.date == date:
+                return day
+        return None
+
+class VacationScheduleGenerator:
+    def __init__(self, company_name="ООО РОГА И КОПЫТА"):
+        self.company_name = company_name
+        self.year = 2026
+        self.max_employees = 20
+        self.vacation_pairs = 10
+        self.calendar = ProductionCalendar(self.year)
+    
+    def create_excel_file(self):
+        """Создание Excel файла"""
+        print("Создание файла Excel...")
+        
+        wb = Workbook()
+        
+        # Удаляем дефолтный лист
+        if 'Sheet' in wb.sheetnames:
+            del wb['Sheet']
+        
+        # Создаем листы в правильном порядке
+        ws_employees = wb.create_sheet("СОТРУДНИКИ", 0)
+        ws_schedule = wb.create_sheet("ГРАФИК", 1)
+        ws_dates = wb.create_sheet("ДАТЫ", 2)  # Служебный лист
+        ws_legend = wb.create_sheet("ЛЕГЕНДА", 3)
+        ws_instruction = wb.create_sheet("ИНСТРУКЦИЯ", 4)
+        
+        # Скрываем служебный лист
+        ws_dates.sheet_state = 'hidden'
+        
+        # Заполняем листы
+        self._create_employees_sheet(ws_employees)
+        self._create_schedule_sheet(ws_schedule)
+        self._create_dates_sheet(ws_dates)
+        self._create_legend_sheet(ws_legend)
+        self._create_instruction_sheet(ws_instruction)
+        
+        # Сохраняем файл
+        current_date = datetime.datetime.now().strftime("%Y%m%d_%H%M")
+        filename = f"отпуск_{self.company_name}_{self.year}_{current_date}.xlsx"
+        
+        try:
+            wb.save(filename)
+            print(f"✓ Файл создан: {filename}")
+            return filename
+        except Exception as e:
+            print(f"✗ Ошибка при сохранении файла: {e}")
+            return None
+    
+    def _create_employees_sheet(self, ws):
+        """Создание листа СОТРУДНИКИ"""
+        print("  Создание листа 'СОТРУДНИКИ'...")
+        
+        # Заголовки
+        headers = ["Табельный номер", "Фамилия И.О."]
+        for i in range(1, self.vacation_pairs + 1):
+            headers.append(f"Отпуск {i} начало")
+            headers.append(f"Отпуск {i} конец")
+        
+        # Записываем заголовки
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.font = Font(bold=True, size=11)
+            cell.fill = PatternFill(start_color="E0E0E0", fill_type="solid")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+        
+        # Заполняем табельные номера
+        for row in range(2, self.max_employees + 2):
+            ws.cell(row=row, column=1, value=row-1)
+            ws.cell(row=row, column=1).alignment = Alignment(horizontal="center")
+        
+        # Настраиваем ширину столбцов
+        ws.column_dimensions['A'].width = 12
+        ws.column_dimensions['B'].width = 25
+        for col in range(3, len(headers) + 1):
+            ws.column_dimensions[get_column_letter(col)].width = 14
+        
+        # Формат дат
+        date_format = 'DD.MM.YYYY'
+        for row in range(2, self.max_employees + 2):
+            for col in range(3, len(headers) + 1):
+                ws.cell(row=row, column=col).number_format = date_format
+        
+        # Пример данных
+        example_data = [
+            ["Иванов И.И.", datetime.date(self.year, 6, 1), datetime.date(self.year, 6, 14)],
+            ["Петров П.П.", datetime.date(self.year, 7, 15), datetime.date(self.year, 7, 28)],
+            ["Сидоров С.С.", datetime.date(self.year, 8, 1), datetime.date(self.year, 8, 14)],
+        ]
+        
+        for i, data in enumerate(example_data):
+            row = i + 2
+            ws.cell(row=row, column=2, value=data[0])
+            if len(data) > 1:
+                ws.cell(row=row, column=3, value=data[1])
+                ws.cell(row=row, column=4, value=data[2])
+        
+        # Закрепляем заголовки
+        ws.freeze_panes = 'A2'
+        
+        print("  ✓ Лист 'СОТРУДНИКИ' создан")
+    
+    def _create_schedule_sheet(self, ws):
+        """Создание листа ГРАФИК с исправленным производственным календарем"""
+        print("  Создание листа 'ГРАФИК'...")
+        
+        # Настраиваем ширину
+        ws.column_dimensions['A'].width = 6
+        ws.column_dimensions['B'].width = 25
+        
+        # Заголовки столбцов данных (№ и ФИО) - ТОЛЬКО В СТРОКЕ 4
+        ws.cell(row=4, column=1, value="№").font = Font(bold=True)
+        ws.cell(row=4, column=2, value="ФИО СОТРУДНИКА").font = Font(bold=True)
+        
+        # Центрируем заголовки данных
+        ws.cell(row=4, column=1).alignment = Alignment(horizontal="center", vertical="center")
+        ws.cell(row=4, column=2).alignment = Alignment(horizontal="center", vertical="center")
+        
+        # Заливка для заголовков данных
+        header_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+        ws.cell(row=4, column=1).fill = header_fill
+        ws.cell(row=4, column=2).fill = header_fill
+        
+        # Создаем календарь на 2026 год - НАЧИНАЕМ С КОЛОНКИ C
+        current_col = 3  # Колонка C - первый день года
+        
+        month_names = ['ЯНВ', 'ФЕВ', 'МАР', 'АПР', 'МАЙ', 'ИЮН', 
+                      'ИЮЛ', 'АВГ', 'СЕН', 'ОКТ', 'НОЯ', 'ДЕК']
+        
+        day_names = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
+        
+        # Цвета для разных типов дней
+        colors = {
+            'рабочий': 'FFFFFF',      # Белый
+            'выходной': 'F2F2F2',     # Серый
+            'праздник': 'FF9999',     # Красный
+            'рабочая суббота': '99FF99', # Зеленый
         }
-    
-    return calendar
-
-def create_employees_sheet_new(ws, max_employees=MAX_EMPLOYEES, vacations_per_employee=VACATIONS_PER_EMPLOYEE):
-    """Создает лист сотрудников по новому формату (только ФИО + 10 отпусков)"""
-    
-    # Стили
-    header_fill = PatternFill(start_color="1F497D", fill_type="solid")
-    header_font = Font(color="FFFFFF", bold=True, size=11)
-    center_align = Alignment(horizontal="center", vertical="center")
-    left_align = Alignment(horizontal="left", vertical="center")
-    thin_border = Border(
-        left=Side(style='thin'),
-        right=Side(style='thin'),
-        top=Side(style='thin'),
-        bottom=Side(style='thin')
-    )
-    
-    # Заголовок компании
-    ws.merge_cells(f'A1:{get_column_letter(2 + vacations_per_employee * 2)}1')
-    company_cell = ws['A1']
-    company_cell.value = f"{COMPANY_NAME} - ГРАФИК ОТПУСКОВ {YEAR}"
-    company_cell.font = Font(bold=True, size=14, color="1F497D")
-    company_cell.alignment = Alignment(horizontal="center", vertical="center")
-    
-    # Основные заголовки
-    headers = ["Табельный номер", "Фамилия И.О."]
-    
-    # Добавляем заголовки для отпусков (10 отпусков)
-    for i in range(1, vacations_per_employee + 1):
-        headers.extend([f"Отпуск {i} начало", f"Отпуск {i} конец"])
-    
-    # Записываем заголовки
-    for col, header in enumerate(headers, 1):
-        cell = ws.cell(row=3, column=col, value=header)
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = center_align
-        cell.border = thin_border
-    
-    # Настраиваем ширину столбцов
-    column_widths = [15, 30]  # Для "Табельный номер" и "Фамилия И.О."
-    
-    # Ширина для колонок с датами отпусков
-    for _ in range(vacations_per_employee * 2):
-        column_widths.append(12)
-    
-    for i, width in enumerate(column_widths, 1):
-        ws.column_dimensions[get_column_letter(i)].width = width
-    
-    # Создаем строки для сотрудников (с запасом)
-    start_row = 4  # Начало данных сотрудников
-    
-    for i in range(max_employees):
-        row_num = start_row + i
         
-        # Табельный номер (автоматическая нумерация)
-        ws.cell(row=row_num, column=1, value=i + 1)
-        ws.cell(row=row_num, column=1).alignment = center_align
-        
-        # ФИО (оставляем пустым для будущего заполнения)
-        ws.cell(row=row_num, column=2, value="")
-        ws.cell(row=row_num, column=2).alignment = left_align
-        
-        # Даты отпусков (оставляем пустыми)
-        for col in range(3, 3 + vacations_per_employee * 2):
-            ws.cell(row=row_num, column=col, value="")
-            ws.cell(row=row_num, column=col).alignment = center_align
-        
-        # Применяем границы ко всем ячейкам строки
-        for col in range(1, 3 + vacations_per_employee * 2):
-            cell = ws.cell(row=row_num, column=col)
-            cell.border = thin_border
-        
-        # Закрашиваем строки через одну для удобства чтения
-        if row_num % 2 == 0:
-            row_fill = PatternFill(start_color="F2F2F2", fill_type="solid")
-            for col in range(1, 3 + vacations_per_employee * 2):
-                ws.cell(row=row_num, column=col).fill = row_fill
-    
-    # Информационная строка
-    info_row = start_row + max_employees + 1
-    info_text = f"Подготовлено мест для сотрудников: {max_employees}. Отпусков на сотрудника: {vacations_per_employee}."
-    ws.cell(row=info_row, column=1, value=info_text)
-    ws.cell(row=info_row, column=1).font = Font(italic=True, color="666666")
-    
-    return start_row, vacations_per_employee
-
-def create_schedule_sheet_new(ws, calendar, max_employees=MAX_EMPLOYEES):
-    """Создает лист графика отпусков"""
-    
-    # Стили
-    header_fill = PatternFill(start_color="1F497D", fill_type="solid")
-    header_font = Font(color="FFFFFF", bold=True, size=11)
-    center_align = Alignment(horizontal="center", vertical="center")
-    left_align = Alignment(horizontal="left", vertical="center")
-    thin_border = Border(
-        left=Side(style='thin'),
-        right=Side(style='thin'),
-        top=Side(style='thin'),
-        bottom=Side(style='thin')
-    )
-    
-    # Заголовок графика
-    last_calendar_col = 2 + len(calendar)  # A,B + все дни года
-    ws.merge_cells(f'A1:{get_column_letter(last_calendar_col)}1')
-    title_cell = ws['A1']
-    title_cell.value = f"{COMPANY_NAME} - ГРАФИК ОТПУСКОВ НА {YEAR} ГОД"
-    title_cell.font = Font(bold=True, size=14, color="1F497D")
-    title_cell.alignment = Alignment(horizontal="center", vertical="center")
-    
-    # Заголовки столбцов
-    ws['A3'] = "№"
-    ws['B3'] = "ФИО"
-    
-    for col in ['A', 'B']:
-        cell = ws[f'{col}3']
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = center_align
-        cell.border = thin_border
-    
-    ws.column_dimensions['A'].width = 6
-    ws.column_dimensions['B'].width = 35
-    
-    # Создаем строки для сотрудников (с запасом)
-    start_row = 4  # Начало данных сотрудников в графике
-    
-    for i in range(max_employees):
-        row_num = start_row + i
-        
-        # Номер
-        ws.cell(row=row_num, column=1, value=i + 1)
-        ws.cell(row=row_num, column=1).alignment = center_align
-        
-        # ФИО (оставляем пустым)
-        ws.cell(row=row_num, column=2, value="")
-        ws.cell(row=row_num, column=2).alignment = left_align
-        
-        # Границы
-        for col in [1, 2]:
-            ws.cell(row=row_num, column=col).border = thin_border
-        
-        # Закрашивание через строку
-        if row_num % 2 == 0:
-            row_fill = PatternFill(start_color="F8F8F8", fill_type="solid")
-            for col in [1, 2]:
-                ws.cell(row=row_num, column=col).fill = row_fill
-    
-    # Создаем календарь на листе
-    last_col = create_calendar_on_sheet_new(ws, calendar, start_row)
-    
-    # Добавляем кнопку обновления
-    button_row = start_row + max_employees + 2
-    ws.cell(row=button_row, column=1, value="🔄 ОБНОВИТЬ ГРАФИК ОТПУСКОВ")
-    button_cell = ws.cell(row=button_row, column=1)
-    button_cell.font = Font(bold=True, color="FFFFFF", size=12)
-    button_cell.fill = PatternFill(start_color="4CAF50", fill_type="solid")
-    button_cell.alignment = center_align
-    button_cell.border = thin_border
-    
-    ws.merge_cells(f'A{button_row}:B{button_row}')
-    
-    # Инструкция
-    instruction = "Внесите даты отпусков на листе 'СОТРУДНИКИ', затем нажмите Alt+F8 и запустите макрос 'ОбновитьГрафик'"
-    ws.cell(row=button_row + 1, column=1, value=instruction)
-    ws.cell(row=button_row + 1, column=1).font = Font(color="666666", italic=True)
-    
-    return last_col
-
-def create_calendar_on_sheet_new(ws, calendar, schedule_start_row=4):
-    """Создает календарь на листе графика"""
-    
-    # Цвета месяцев
-    month_colors = {
-        1: "4F81BD", 2: "8064A2", 3: "9BBB59", 4: "C0504D",
-        5: "F79646", 6: "1F497D", 7: "948A54", 8: "31869B",
-        9: "E26B0A", 10: "60497A", 11: "C00000", 12: "366092"
-    }
-    
-    # Названия месяцев
-    month_names = {
-        1: "ЯНВ", 2: "ФЕВ", 3: "МАР", 4: "АПР",
-        5: "МАЙ", 6: "ИЮН", 7: "ИЮЛ", 8: "АВГ",
-        9: "СЕН", 10: "ОКТ", 11: "НОЯ", 12: "ДЕК"
-    }
-    
-    # Дни недели
-    weekday_names = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
-    
-    # Группируем дни по месяцам
-    months = {}
-    for date_info in calendar.values():
-        month = date_info['month']
-        if month not in months:
-            months[month] = []
-        months[month].append(date_info)
-    
-    sorted_months = sorted(months.keys())
-    current_col = 3  # Начинаем с колонки C
-    
-    # Заголовки для календаря (строка 2)
-    for month_num in sorted_months:
-        month_days = months[month_num]
-        start_col = current_col
-        end_col = current_col + len(month_days) - 1
-        
-        # Объединяем для названия месяца
-        start_letter = get_column_letter(start_col)
-        end_letter = get_column_letter(end_col)
-        ws.merge_cells(f"{start_letter}2:{end_letter}2")
-        
-        # Название месяца
-        month_cell = ws.cell(row=2, column=start_col)
-        month_cell.value = month_names[month_num]
-        month_cell.fill = PatternFill(start_color=month_colors[month_num], fill_type="solid")
-        month_cell.font = Font(color="FFFFFF", bold=True, size=11)
-        month_cell.alignment = Alignment(horizontal="center", vertical="center")
-        month_cell.border = Border(
-            left=Side(style='thin'),
-            right=Side(style='thin'),
-            top=Side(style='thin'),
-            bottom=Side(style='thin')
-        )
-        
-        # Дни месяца
-        for i, day_info in enumerate(month_days):
-            col = current_col + i
+        # Создаем заголовки календаря (строки 1-3)
+        for month in range(1, 13):
+            days_in_month = calendar.monthrange(self.year, month)[1]
             
-            # Строка 3: ЧИСЛО ДНЯ (видимое)
-            day_cell = ws.cell(row=3, column=col, value=day_info['day'])
-            day_cell.alignment = Alignment(horizontal="center", vertical="center")
-            day_cell.font = Font(bold=True, size=9)
-            day_cell.border = Border(
-                left=Side(style='thin'),
-                right=Side(style='thin'),
-                top=Side(style='thin'),
-                bottom=Side(style='thin')
+            # Объединяем ячейки для названия месяца (СТРОКА 1)
+            start_col = current_col
+            end_col = current_col + days_in_month - 1
+            
+            ws.merge_cells(
+                start_row=1, start_column=start_col,
+                end_row=1, end_column=end_col
             )
             
-            # Определяем цвет фона для типа дня
-            bg_color = "FFFFFF"
-            if day_info['day_type'] == 'holiday':
-                bg_color = "FF9999"
-            elif day_info['day_type'] == 'pre_holiday':
-                bg_color = "FFFF99"
-            elif day_info['day_type'] == 'work_saturday':
-                bg_color = "CCFFCC"
-            elif day_info['day_type'] == 'weekend':
-                bg_color = "E6E6E6"
+            month_cell = ws.cell(row=1, column=start_col, value=month_names[month-1])
+            month_cell.alignment = Alignment(horizontal="center", vertical="center")
+            month_cell.font = Font(bold=True, size=11)
+            month_cell.fill = PatternFill(start_color="E6E6E6", fill_type="solid")
             
-            day_cell.fill = PatternFill(start_color=bg_color, fill_type="solid")
-            
-            # Строка 4: ДЕНЬ НЕДЕЛИ
-            weekday = weekday_names[day_info['weekday']]
-            
-            # Добавляем символы для особых дней
-            symbol = ""
-            if day_info['day_type'] == 'holiday':
-                symbol = " ✶"
-            elif day_info['day_type'] == 'pre_holiday':
-                symbol = " ◐"
-            elif day_info['day_type'] == 'work_saturday':
-                symbol = " ⚒"
-            
-            weekday_cell = ws.cell(row=4, column=col, value=f"{weekday}{symbol}")
-            weekday_cell.alignment = Alignment(horizontal="center", vertical="center")
-            weekday_cell.font = Font(size=9)
-            weekday_cell.border = Border(
-                left=Side(style='thin'),
-                right=Side(style='thin'),
-                top=Side(style='thin'),
-                bottom=Side(style='thin')
-            )
-            weekday_cell.fill = PatternFill(start_color=bg_color, fill_type="solid")
-            
-            # Скрытая строка 5: полная дата для макроса
-            date_cell = ws.cell(row=5, column=col)
-            date_cell.value = day_info['date']  # Полная дата
-            date_cell.number_format = 'DD.MM.YYYY'
-            date_cell.font = Font(size=1, color="FFFFFF")  # Почти невидимый
-            
-            # Ширина столбца
-            ws.column_dimensions[get_column_letter(col)].width = 4.5
-        
-        current_col += len(month_days)
-    
-    # Скрываем строку 5 с датами
-    ws.row_dimensions[5].hidden = True
-    
-    return current_col - 1
-
-def create_instructions_sheet_new(ws):
-    """Создает лист с инструкциями"""
-    
-    # Заголовок
-    ws.merge_cells('A1:E1')
-    title_cell = ws['A1']
-    title_cell.value = f"ИНСТРУКЦИЯ ПО РАБОТЕ С ГРАФИКОМ ОТПУСКОВ {YEAR}"
-    title_cell.font = Font(bold=True, size=14, color="1F497D")
-    title_cell.alignment = Alignment(horizontal="center", vertical="center")
-    
-    instructions = [
-        ["РАЗДЕЛ 1: ОСНОВНЫЕ ШАГИ", "", "", "", ""],
-        ["1. ЗАПОЛНЕНИЕ ДАННЫХ", "", "", "", ""],
-        ["• Откройте лист 'СОТРУДНИКИ'", "", "", "", ""],
-        ["• В столбце B введите ФИО сотрудников (формат: Иванов И.И.)", "", "", "", ""],
-        [f"• В столбцах C-{get_column_letter(2 + VACATIONS_PER_EMPLOYEE * 2)} введите даты отпусков", "", "", "", ""],
-        ["• Формат дат: ДД.ММ.ГГГГ (например, 15.01.2026)", "", "", "", ""],
-        ["• Можно оставлять строки пустыми для будущих сотрудников", "", "", "", ""],
-        ["", "", "", "", ""],
-        ["2. ОБНОВЛЕНИЕ ГРАФИКА", "", "", "", ""],
-        ["• После заполнения дат перейдите на лист 'ГРАФИК'", "", "", "", ""],
-        ["• Нажмите Alt+F8 (или Developer → Macros)", "", "", "", ""],
-        ["• Выберите макрос 'ОбновитьГрафик'", "", "", "", ""],
-        ["• Нажмите 'Выполнить'", "", "", "", ""],
-        ["• График автоматически обновится", "", "", "", ""],
-        ["", "", "", "", ""],
-        ["РАЗДЕЛ 2: ФОРМАТ ДАННЫХ", "", "", "", ""],
-        ["• Столбец A: Табельный номер (заполняется автоматически)", "", "", "", ""],
-        ["• Столбец B: Фамилия И.О. (обязательно для заполнения)", "", "", "", ""],
-        [f"• Столбцы C-{get_column_letter(2 + VACATIONS_PER_EMPLOYEE * 2)}: Даты отпусков", "", "", "", ""],
-        ["• Пары столбцов: 'Отпуск X начало' и 'Отпуск X конец'", "", "", "", ""],
-        ["• Максимально отпусков на сотрудника: {VACATIONS_PER_EMPLOYEE}", "", "", "", ""],
-        ["", "", "", "", ""],
-        ["РАЗДЕЛ 3: ОБОЗНАЧЕНИЯ В ГРАФИКЕ", "", "", "", ""],
-        ["• Белый фон - рабочий день", "", "", "", ""],
-        ["• Серый фон - выходной день", "", "", "", ""],
-        ["• Красный фон + ✶ - праздничный день", "", "", "", ""],
-        ["• Желтый фон + ◐ - предпраздничный день", "", "", "", ""],
-        ["• Зеленый фон + ⚒ - рабочая суббота", "", "", "", ""],
-        ["• Светло-зеленый + 'О' - отпуск сотрудника", "", "", "", ""],
-        ["", "", "", "", ""],
-        ["ТЕХНИЧЕСКАЯ ИНФОРМАЦИЯ", "", "", "", ""],
-        ["Версия файла: 3.0 (Новый формат)", "", "", "", ""],
-        [f"Дата создания: {datetime.now().strftime('%d.%m.%Y %H:%M')}", "", "", "", ""],
-        [f"Максимальное количество сотрудников: {MAX_EMPLOYEES}", "", "", "", ""],
-        [f"Максимальное отпусков на сотрудника: {VACATIONS_PER_EMPLOYEE}", "", "", "", ""],
-        [f"Год графика: {YEAR}", "", "", "", ""],
-        [f"Компания: {COMPANY_NAME}", "", "", "", ""],
-    ]
-    
-    for row_idx, row_data in enumerate(instructions, start=3):
-        for col_idx, cell_value in enumerate(row_data[:5], start=1):
-            if cell_value:
-                cell = ws.cell(row=row_idx, column=col_idx, value=cell_value)
+            # Заполняем числа (СТРОКА 2) и дни недели (СТРОКА 3)
+            for day in range(1, days_in_month + 1):
+                col = current_col + day - 1
+                date_obj = datetime.date(self.year, month, day)
+                day_info = self.calendar.get_day_info(date_obj)
                 
-                # Форматирование заголовков
-                if "РАЗДЕЛ" in cell_value or "ТЕХНИЧЕСКАЯ" in cell_value:
-                    cell.font = Font(bold=True, size=12, color="1F497D")
-                elif cell_value.startswith(("1.", "2.", "3.")):
-                    cell.font = Font(bold=True, size=11, color="C00000")
-                elif cell_value.startswith("•"):
-                    cell.font = Font(size=10)
-                elif "Версия" in cell_value or "Дата" in cell_value:
-                    cell.font = Font(italic=True, color="666666")
+                # Число месяца (СТРОКА 2)
+                day_cell = ws.cell(row=2, column=col, value=day)
+                day_cell.alignment = Alignment(horizontal="center", vertical="center")
+                day_cell.font = Font(size=9)
+                
+                # День недели + символ (СТРОКА 3)
+                day_name = day_names[date_obj.weekday()]
+                
+                # Добавляем символ для особых дней согласно производственному календарю
+                symbol = ""
+                if day_info:
+                    if day_info.day_type == 'праздник':
+                        symbol = " ✶"  # Праздник
+                    elif day_info.is_short:
+                        symbol = " ●"  # Сокращенный (предпраздничный)
+                    elif day_info.day_type == 'рабочая суббота':
+                        symbol = " ◉"  # Рабочая суббота
+                    elif day_info.day_type == 'выходной' and date_obj.weekday() < 5:
+                        symbol = " ✶"  # Дополнительный выходной (перенос)
+                
+                weekday_cell = ws.cell(row=3, column=col, value=f"{day_name}{symbol}")
+                weekday_cell.alignment = Alignment(horizontal="center", vertical="center")
+                weekday_cell.font = Font(size=8)
+                
+                # Устанавливаем цвет фона согласно типу дня
+                fill_color = colors['рабочий']
+                if day_info:
+                    if day_info.day_type == 'праздник':
+                        fill_color = colors['праздник']
+                    elif day_info.day_type == 'выходной':
+                        fill_color = colors['выходной']
+                    elif day_info.day_type == 'рабочая суббота':
+                        fill_color = colors['рабочая суббота']
+                
+                fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
+                day_cell.fill = fill
+                weekday_cell.fill = fill
+                
+                # Узкие колонки для дней
+                ws.column_dimensions[get_column_letter(col)].width = 3.5
+            
+            current_col += days_in_month
+        
+        # Добавляем строки для сотрудников (начинаем с СТРОКИ 5)
+        for i in range(1, self.max_employees + 1):
+            row = i + 4  # Строка 5 и ниже (строка 4 - заголовки данных)
+            
+            # Номер сотрудника
+            num_cell = ws.cell(row=row, column=1, value=i)
+            num_cell.alignment = Alignment(horizontal="center", vertical="center")
+            num_cell.font = Font(size=10)
+            
+            # ФИО (заполнится макросом)
+            name_cell = ws.cell(row=row, column=2, value=f"Сотрудник {i}")
+            name_cell.font = Font(size=10)
+            
+            # Форматируем строки данных
+            for col in range(1, current_col):
+                cell = ws.cell(row=row, column=col)
+                cell.border = Border(
+                    left=Side(style='thin'),
+                    right=Side(style='thin'),
+                    top=Side(style='thin'),
+                    bottom=Side(style='thin')
+                )
+                cell.alignment = Alignment(vertical="center", horizontal="center")
+        
+        # Закрепляем области: строка 4 (заголовки данных) и колонки A,B
+        ws.freeze_panes = 'C5'
+        
+        # Добавляем итоговую информацию
+        last_col_letter = get_column_letter(current_col - 1)
+        footer_row = self.max_employees + 6
+        ws.merge_cells(f'A{footer_row}:{last_col_letter}{footer_row}')
+        footer = ws.cell(row=footer_row, column=1, 
+                        value=f"График отпусков {self.company_name} на {self.year} год")
+        footer.font = Font(italic=True, size=10, color="666666")
+        footer.alignment = Alignment(horizontal="center")
+        
+        print(f"  ✓ Лист 'ГРАФИК' создан с исправленным производственным календарем ({current_col-3} дней)")
     
-    ws.column_dimensions['A'].width = 50
-    ws.column_dimensions['B'].width = 5
-    ws.column_dimensions['C'].width = 5
-    ws.column_dimensions['D'].width = 5
-    ws.column_dimensions['E'].width = 5
-
-def create_macro_file_new():
-    """Создает файл с исправленным макросом для нового формата"""
+    def _create_dates_sheet(self, ws):
+        """Создание служебного листа с датами"""
+        print("  Создание служебного листа с датами...")
+        
+        # Заполняем даты по горизонтали
+        date_obj = datetime.date(self.year, 1, 1)
+        col = 1
+        
+        while date_obj.year == self.year:
+            cell = ws.cell(row=1, column=col, value=date_obj)
+            cell.number_format = 'DD.MM.YYYY'
+            date_obj += timedelta(days=1)
+            col += 1
+        
+        # Минимизируем видимость
+        for c in range(1, col):
+            ws.column_dimensions[get_column_letter(c)].width = 0.5
+        
+        print(f"  ✓ Служебный лист создан ({col-1} дней)")
     
-    macro_code = f'''Option Explicit
-' УЛУЧШЕННЫЙ МАКРОС ДЛЯ ГРАФИКА ОТПУСКОВ (НОВЫЙ ФОРМАТ)
-' ИГНОРИРУЕТ ПУСТЫЕ СТРОКИ, РАБОТАЕТ С {VACATIONS_PER_EMPLOYEE} ОТПУСКАМИ НА СОТРУДНИКА
+    def _create_legend_sheet(self, ws):
+        """Создание листа ЛЕГЕНДА"""
+        print("  Создание листа 'ЛЕГЕНДА'...")
+        
+        ws.column_dimensions['A'].width = 15
+        ws.column_dimensions['B'].width = 25
+        ws.column_dimensions['C'].width = 40
+        
+        # Заголовок
+        ws.merge_cells('A1:C1')
+        title = ws.cell(row=1, column=1, value="ЛЕГЕНДА ГРАФИКА ОТПУСКОВ")
+        title.font = Font(bold=True, size=14, color="1F4E78")
+        title.alignment = Alignment(horizontal="center")
+        
+        # Заголовки таблицы
+        headers = ["Обозначение", "Тип дня", "Описание"]
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=3, column=col, value=header)
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+        
+        # Данные легенды
+        legend_data = [
+            ("✶", "Праздник/Выходной", "Нерабочий праздничный или дополнительный выходной день", "FF9999"),
+            ("●", "Сокращенный", "Предпраздничный рабочий день (короче на 1 час)", "FFFF99"),
+            ("◉", "Рабочая суббота", "Перенесенный рабочий день (суббота)", "99FF99"),
+            ("О", "Отпуск", "День отпуска сотрудника", "C6EFCE"),
+            ("", "Выходной", "Суббота, воскресенье", "F2F2F2"),
+            ("", "Рабочий", "Обычный рабочий день", "FFFFFF"),
+        ]
+        
+        for i, (symbol, day_type, description, color) in enumerate(legend_data, 1):
+            row = i + 3
+            
+            # Символ
+            sym_cell = ws.cell(row=row, column=1, value=symbol)
+            sym_cell.alignment = Alignment(horizontal="center", vertical="center")
+            
+            # Тип дня
+            type_cell = ws.cell(row=row, column=2, value=day_type)
+            
+            # Описание
+            desc_cell = ws.cell(row=row, column=3, value=description)
+            
+            # Цвет фона
+            fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
+            sym_cell.fill = fill
+            type_cell.fill = fill
+            desc_cell.fill = fill
+        
+        print("  ✓ Лист 'ЛЕГЕНДА' создан")
+    
+    def _create_instruction_sheet(self, ws):
+        """Создание листа ИНСТРУКЦИЯ"""
+        print("  Создание листа 'ИНСТРУКЦИЯ'...")
+        
+        ws.column_dimensions['A'].width = 80
+        
+        content = [
+            ("ИНСТРУКЦИЯ ПО РАБОТЕ С ГРАФИКОМ ОТПУСКОВ", 16, True, True),
+            ("", 1, False, False),
+            ("ШАГ 1: УСТАНОВКА МАКРОСА", 14, True, False),
+            ("1. Откройте файл в Microsoft Excel", 11, False, False),
+            ("2. Нажмите Alt+F11 для открытия редактора VBA", 11, False, False),
+            ("3. В меню выберите Insert → Module", 11, False, False),
+            ("4. Скопируйте код из файла vacation_macro.txt в новый модуль", 11, False, False),
+            ("5. Закройте редактор VBA (Alt+Q)", 11, False, False),
+            ("", 1, False, False),
+            ("ШАГ 2: ЗАПОЛНЕНИЕ ДАННЫХ", 14, True, False),
+            ("1. Перейдите на лист 'СОТРУДНИКИ'", 11, False, False),
+            ("2. Заполните столбец 'Фамилия И.О.'", 11, False, False),
+            ("3. Заполните даты отпусков в столбцах 'Отпуск N начало/конец'", 11, False, False),
+            ("4. Формат дат: ДД.ММ.ГГГГ (например: 15.06.2026)", 11, False, False),
+            ("", 1, False, False),
+            ("ШАГ 3: ЗАПУСК ГРАФИКА", 14, True, False),
+            ("1. Нажмите Alt+F8 для открытия диалога макросов", 11, False, False),
+            ("2. Выберите макрос 'ОбновитьГрафик' → 'Выполнить'", 11, False, False),
+            ("3. Перейдите на лист 'ГРАФИК' для просмотра", 11, False, False),
+            ("", 1, False, False),
+            ("ВАЖНО!", 14, True, False),
+            ("• Максимальное количество сотрудников: 20", 11, False, False),
+            ("• Максимальное количество периодов отпуска: 10 на сотрудника", 11, False, False),
+            ("• При изменении дат отпуска перезапустите макрос", 11, False, False),
+            ("• Пустые строки (без ФИО) игнорируются", 11, False, False),
+        ]
+        
+        for i, (text, size, bold, center) in enumerate(content, 1):
+            cell = ws.cell(row=i, column=1, value=text)
+            cell.font = Font(size=size, bold=bold)
+            if center:
+                cell.alignment = Alignment(horizontal="center")
+        
+        print("  ✓ Лист 'ИНСТРУКЦИЯ' создан")
+    
+    def create_vba_macro_file(self):
+        """Создание файла с VBA макросом"""
+        print("\nСоздание файла с VBA макросом...")
+        
+        vba_code = '''Option Explicit
 
-Public Sub ОбновитьГрафик()
-    Dim wsСотрудники As Worksheet
-    Dim wsГрафик As Worksheet
+Public Const MAX_EMPLOYEES As Integer = 20
+
+Sub ОбновитьГрафик()
+    ' Макрос для обновления графика отпусков
+    ' Считывает данные с листа СОТРУДНИКИ и заполняет лист ГРАФИК
+    
+    Dim wsEmployees As Worksheet
+    Dim wsSchedule As Worksheet
+    Dim wsService As Worksheet
+    
+    Dim lastRow As Long
+    Dim empRow As Long
+    Dim scheduleRow As Long
+    Dim dateCol As Long
+    
+    Dim startDate As Date
+    Dim endDate As Date
+    Dim currentDate As Date
+    
+    Dim employeeCount As Long
+    Dim vacationCount As Long
+    Dim periodCount As Long
+    
     Dim i As Long, j As Long
-    Dim датаНачало As Date
-    Dim датаКонец As Date
-    Dim текущаяДата As Date
-    Dim найденныйСтолбец As Long
-    Dim обработаноСотрудников As Integer
-    Dim обработаноОтпусков As Integer
-    Dim вакантныхМест As Integer
+    Dim startCol As Long, endCol As Long
+    Dim foundDate As Range
     
+    ' Отключаем обновление экрана для скорости
     Application.ScreenUpdating = False
     Application.Calculation = xlCalculationManual
+    Application.EnableEvents = False
     
-    On Error GoTo ОшибкаОбработки
+    On Error GoTo ErrorHandler
     
-    Set wsСотрудники = ThisWorkbook.Worksheets("СОТРУДНИКИ")
-    Set wsГрафик = ThisWorkbook.Worksheets("ГРАФИК")
+    ' Инициализация счетчиков
+    employeeCount = 0
+    vacationCount = 0
     
-    ' 1. ОЧИСТКА СТАРЫХ ДАННЫХ В ГРАФИКЕ
-    Call ОчиститьСтарыйГрафик(wsГрафик)
+    ' Получаем ссылки на рабочие листы
+    Set wsEmployees = ThisWorkbook.Worksheets("СОТРУДНИКИ")
+    Set wsSchedule = ThisWorkbook.Worksheets("ГРАФИК")
+    Set wsService = ThisWorkbook.Worksheets("ДАТЫ")
     
-    ' 2. ОБРАБОТКА СОТРУДНИКОВ (начиная со строки 4)
-    обработаноСотрудников = 0
-    обработаноОтпусков = 0
-    вакантныхМест = {MAX_EMPLOYEES}
+    ' Очищаем предыдущий график
+    Call ОчиститьГрафик(wsSchedule)
     
-    For i = 4 To {3 + MAX_EMPLOYEES} ' Обрабатываем все зарезервированные строки
-        ' ПРОВЕРКА: если ФИО пустое - пропускаем сотрудника
-        If Trim(wsСотрудники.Cells(i, 2).Value) = "" Then
-            ' Пустая строка - вакантное место
-        Else
-            ' ОБРАБАТЫВАЕМ СОТРУДНИКА С ДАННЫМИ
-            обработаноСотрудников = обработаноСотрудников + 1
-            вакантныхМест = вакантныхМест - 1
+    ' Находим последнюю строку с данными на листе СОТРУДНИКИ
+    lastRow = wsEmployees.Cells(wsEmployees.Rows.Count, "B").End(xlUp).Row
+    
+    ' Ограничиваем обработку максимум 20 сотрудниками
+    If lastRow > MAX_EMPLOYEES + 1 Then lastRow = MAX_EMPLOYEES + 1
+    
+    ' Обрабатываем каждого сотрудника
+    For i = 2 To lastRow
+        ' Проверяем, есть ли ФИО в строке
+        If Trim(wsEmployees.Cells(i, 2).Value) <> "" Then
+            employeeCount = employeeCount + 1
             
-            ' Копируем ФИО в график (строка в графике = i)
-            wsГрафик.Cells(i, 2).Value = wsСотрудники.Cells(i, 2).Value
+            ' Данные сотрудников начинаются с СТРОКИ 5 (строка 4 - заголовки)
+            scheduleRow = employeeCount + 4
             
-            ' ОБРАБАТЫВАЕМ ВСЕ ОТПУСКИ СОТРУДНИКА
-            For j = 1 To {VACATIONS_PER_EMPLOYEE}
-                Dim столбецНачало As Long
-                Dim столбецКонец As Long
+            ' Копируем табельный номер и ФИО на лист ГРАФИК
+            wsSchedule.Cells(scheduleRow, 1).Value = wsEmployees.Cells(i, 1).Value
+            wsSchedule.Cells(scheduleRow, 2).Value = wsEmployees.Cells(i, 2).Value
+            
+            ' Обрабатываем периоды отпусков (максимум 10 периодов)
+            periodCount = 0
+            For j = 1 To 10
+                startCol = 2 * j + 1  ' Столбцы: 3, 5, 7, 9, 11, 13, 15, 17, 19, 21
+                endCol = startCol + 1
                 
-                столбецНачало = 2 + (j - 1) * 2 + 1 ' C, E, G, ...
-                столбецКонец = столбецНачало + 1    ' D, F, H, ...
-                
-                Call ОбработатьОтпуск(wsСотрудники, wsГрафик, i, столбецНачало, столбецКонец, i)
-                
-                ' Считаем обработанные отпуска
-                If wsСотрудники.Cells(i, столбецНачало).Value <> "" And _
-                   wsСотрудники.Cells(i, столбецКонец).Value <> "" Then
-                    обработаноОтпусков = обработаноОтпусков + 1
+                ' Проверяем, есть ли дата начала отпуска
+                If Not IsEmpty(wsEmployees.Cells(i, startCol).Value) Then
+                    If IsDate(wsEmployees.Cells(i, startCol).Value) Then
+                        startDate = CDate(wsEmployees.Cells(i, startCol).Value)
+                        
+                        ' Проверяем, есть ли дата окончания отпуска
+                        If Not IsEmpty(wsEmployees.Cells(i, endCol).Value) Then
+                            If IsDate(wsEmployees.Cells(i, endCol).Value) Then
+                                endDate = CDate(wsEmployees.Cells(i, endCol).Value)
+                                
+                                ' Проверяем корректность дат (конец не раньше начала)
+                                If endDate >= startDate Then
+                                    periodCount = periodCount + 1
+                                    vacationCount = vacationCount + 1
+                                    
+                                    ' Отмечаем все дни отпуска на графике
+                                    currentDate = startDate
+                                    Do While currentDate <= endDate
+                                        ' Ищем столбец с этой датой на служебном листе
+                                        Set foundDate = wsService.Rows(1).Find( _
+                                            What:=currentDate, _
+                                            LookIn:=xlFormulas, _
+                                            LookAt:=xlWhole, _
+                                            SearchOrder:=xlByColumns, _
+                                            SearchDirection:=xlNext)
+                                        
+                                        If Not foundDate Is Nothing Then
+                                            dateCol = foundDate.Column
+                                            
+                                            ' Заполняем ячейку на графике
+                                            With wsSchedule.Cells(scheduleRow, dateCol)
+                                                .Value = "О"  ' Буква О - отпуск
+                                                .Interior.Color = RGB(198, 239, 206)  ' Светло-зеленый
+                                                .Font.Bold = True
+                                                .Font.Name = "Arial"
+                                                .Font.Size = 9
+                                                .HorizontalAlignment = xlCenter
+                                                .VerticalAlignment = xlCenter
+                                            End With
+                                        End If
+                                        
+                                        currentDate = currentDate + 1
+                                    Loop
+                                End If
+                            End If
+                        End If
+                    End If
                 End If
             Next j
         End If
     Next i
     
-    ' 3. АВТОПОДБОР ШИРИНЫ СТОЛБЦОВ
-    wsГрафик.Columns.AutoFit
+    ' Автоподбор ширины столбца с ФИО
+    wsSchedule.Columns("B:B").AutoFit
     
+    ' Восстанавливаем настройки Excel
     Application.ScreenUpdating = True
     Application.Calculation = xlCalculationAutomatic
+    Application.EnableEvents = True
     
-    ' 4. ИНФОРМАЦИОННОЕ СООБЩЕНИЕ
-    Dim сообщение As String
-    сообщение = "График отпусков успешно обновлен!" & vbCrLf & vbCrLf
-    сообщение = сообщение & "Обработано сотрудников: " & обработаноСотрудников & vbCrLf
-    сообщение = сообщение & "Обработано отпусков: " & обработаноОтпусков & vbCrLf
-    сообщение = сообщение & "Вакантных мест: " & вакантныхМест & " из " & {MAX_EMPLOYEES}
+    ' Показываем информационное сообщение
+    MsgBox "График отпусков успешно обновлен!" & vbCrLf & _
+           "Обработано сотрудников: " & employeeCount & vbCrLf & _
+           "Найдено периодов отпуска: " & vacationCount, _
+           vbInformation + vbOKOnly, _
+           "Обновление графика отпусков"
     
-    MsgBox сообщение, vbInformation, "Обновление завершено"
+    ' Активируем лист с графиком
+    wsSchedule.Activate
+    wsSchedule.Range("A1").Select
+    
     Exit Sub
-    
-ОшибкаОбработки:
+
+ErrorHandler:
+    ' Восстанавливаем настройки при ошибке
     Application.ScreenUpdating = True
     Application.Calculation = xlCalculationAutomatic
-    MsgBox "Ошибка при обновлении графика:" & vbCrLf & Err.Description, vbCritical, "Ошибка"
+    Application.EnableEvents = True
+    
+    ' Показываем сообщение об ошибке
+    MsgBox "Произошла ошибка при обновлении графика!" & vbCrLf & _
+           "Код ошибки: " & Err.Number & vbCrLf & _
+           "Описание: " & Err.Description & vbCrLf & _
+           "Проверьте:" & vbCrLf & _
+           "1. Корректность формата дат" & vbCrLf & _
+           "2. Наличие ФИО в строках" & vbCrLf & _
+           "3. Что дата окончания не раньше даты начала", _
+           vbCritical + vbOKOnly, _
+           "Ошибка обновления графика"
 End Sub
 
-Private Sub ОчиститьСтарыйГрафик(ws As Worksheet)
-    Dim последнийСтолбец As Long
+Private Sub ОчиститьГрафик(wsSchedule As Worksheet)
+    ' Очистка данных на листе ГРАФИК (сохраняет заголовки календаря)
+    
+    Dim lastRow As Long
+    Dim lastCol As Long
     Dim i As Long, j As Long
     
-    последнийСтолбец = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
-    Dim последняяСтрока As Long
-    последняяСтрока = {3 + MAX_EMPLOYEES} ' Все строки сотрудников
+    ' Находим последнюю строку с данными (начинаем поиск со строки 5)
+    lastRow = wsSchedule.Cells(wsSchedule.Rows.Count, "B").End(xlUp).Row
     
-    If последнийСтолбец > 2 Then
-        For i = 4 To последняяСтрока ' Строки с сотрудниками
-            For j = 3 To последнийСтолбец
-                With ws.Cells(i, j)
-                    .ClearContents
-                    .Interior.ColorIndex = xlNone
-                    .Font.ColorIndex = xlAutomatic
-                    .Font.Bold = False
-                End With
-            Next j
-        Next i
-    End If
-End Sub
-
-Private Sub ОбработатьОтпуск(wsДанные As Worksheet, wsГрафик As Worksheet, _
-                            строкаДанных As Long, столбецНачало As Long, _
-                            столбецКонец As Long, строкаГрафика As Long)
-    Dim датаНачало As Date
-    Dim датаКонец As Date
-    Dim текущаяДата As Date
-    Dim номерСтолбца As Long
-    
-    On Error Resume Next
-    датаНачало = CDate(wsДанные.Cells(строкаДанных, столбецНачало).Value)
-    датаКонец = CDate(wsДанные.Cells(строкаДанных, столбецКонец).Value)
-    On Error GoTo 0
-    
-    ' ПРОВЕРКА ВАЛИДНОСТИ ДАТ
-    If IsDate(датаНачало) And IsDate(датаКонец) Then
-        If датаКонец >= датаНачало Then
-            ' ЦВЕТ ДЛЯ ОТПУСКА (светло-зеленый)
-            Dim цветОтпуска As Long
-            цветОтпуска = RGB(144, 238, 144)
+    ' Если есть данные для очистки (данные начинаются с строки 5)
+    If lastRow >= 5 Then
+        ' Очищаем номера и ФИО сотрудников (строки 5 и ниже)
+        wsSchedule.Range("A5:B" & lastRow).ClearContents
+        
+        ' Находим последний столбец с датами
+        lastCol = wsSchedule.Cells(3, wsSchedule.Columns.Count).End(xlToLeft).Column
+        
+        ' Очищаем отметки об отпусках (начиная с колонки C, строки 5 и ниже)
+        If lastCol >= 3 Then
+            ' Очищаем содержимое
+            wsSchedule.Range(wsSchedule.Cells(5, 3), wsSchedule.Cells(lastRow, lastCol)).ClearContents
             
-            ' ОТМЕТКА ОТПУСКА В ГРАФИКЕ
-            текущаяДата = датаНачало
-            Do While текущаяДата <= датаКонец
-                номерСтолбца = НайтиСтолбецПоДате(wsГрафик, текущаяДата)
-                
-                If номерСтолбца > 0 Then
-                    With wsГрафик.Cells(строкаГрафика, номерСтолбца)
-                        .Value = "О"
-                        .Interior.Color = цветОтпуска
-                        .Font.Bold = True
-                        .Font.Color = RGB(0, 100, 0)
-                        .HorizontalAlignment = xlCenter
-                        .VerticalAlignment = xlCenter
+            ' Сбрасываем форматирование (цвет и жирный шрифт)
+            For i = 5 To lastRow
+                For j = 3 To lastCol
+                    With wsSchedule.Cells(i, j)
+                        .Interior.ColorIndex = xlNone
+                        .Font.Bold = False
+                        .Font.ColorIndex = xlAutomatic
                     End With
-                End If
-                
-                текущаяДата = DateAdd("d", 1, текущаяДата)
-            Loop
+                Next j
+            Next i
         End If
     End If
 End Sub
 
-Private Function НайтиСтолбецПоДате(ws As Worksheet, искомаяДата As Date) As Long
-    Dim col As Long
-    Dim последнийСтолбец As Long
+Sub ТестовыеДанные()
+    ' Процедура для заполнения тестовых данных
     
-    последнийСтолбец = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
+    Dim ws As Worksheet
+    Dim i As Long
     
-    For col = 3 To последнийСтолбец
-        ' ИЩЕМ В СКРЫТОЙ СТРОКЕ 5 (там полные даты)
-        If ws.Cells(5, col).Value <> "" Then
-            If IsDate(ws.Cells(5, col).Value) Then
-                Dim датаВЯчейке As Date
-                датаВЯчейке = CDate(ws.Cells(5, col).Value)
-                
-                ' СРАВНИВАЕМ ДАТЫ
-                If Year(датаВЯчейке) = Year(искомаяДата) And _
-                   Month(датаВЯчейке) = Month(искомаяДата) And _
-                   Day(датаВЯчейке) = Day(искомаяДата) Then
-                    НайтиСтолбецПоДате = col
-                    Exit Function
-                End If
-            End If
-        End If
-    Next col
+    Set ws = ThisWorkbook.Worksheets("СОТРУДНИКИ")
     
-    НайтиСтолбецПоДате = 0 ' Дата не найдена
-End Function
-
-Public Sub ТестМакроса()
-    MsgBox "Макрос готов к работе! Запустите 'ОбновитьГрафик'.", vbInformation, "Тест"
+    ' Очищаем старые данные (кроме заголовков)
+    ws.Range("A2:V21").ClearContents
+    
+    ' Восстанавливаем номера строк
+    For i = 1 To 20
+        ws.Cells(i + 1, 1).Value = i
+    Next i
+    
+    ' Заполняем тестовые данные
+    ws.Cells(2, 2).Value = "Иванов И.И."
+    ws.Cells(2, 3).Value = DateSerial(2026, 6, 1)
+    ws.Cells(2, 4).Value = DateSerial(2026, 6, 14)
+    
+    ws.Cells(3, 2).Value = "Петров П.П."
+    ws.Cells(3, 3).Value = DateSerial(2026, 7, 15)
+    ws.Cells(3, 4).Value = DateSerial(2026, 7, 28)
+    
+    ws.Cells(4, 2).Value = "Сидоров С.С."
+    ws.Cells(4, 3).Value = DateSerial(2026, 8, 1)
+    ws.Cells(4, 4).Value = DateSerial(2026, 8, 14)
+    
+    ' Форматируем даты
+    ws.Range("C2:V21").NumberFormat = "DD.MM.YYYY"
+    
+    ' Автоподбор ширины столбцов
+    ws.Columns("A:V").AutoFit
+    
+    MsgBox "Тестовые данные успешно добавлены!" & vbCrLf & _
+           "Запустите макрос 'ОбновитьГрафик' для построения графика.", _
+           vbInformation, "Тестовые данные"
 End Sub
 '''
-    
-    # Сохраняем макрос
-    macro_filename = "макрос_новый_формат.txt"
-    with open(macro_filename, "w", encoding="utf-8") as f:
-        f.write(macro_code)
-    
-    return macro_filename
+        
+        # Сохраняем макрос в файл
+        filename = "vacation_macro.txt"
+        
+        try:
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(vba_code)
+            print(f"✓ Файл с макросом создан: {filename}")
+            return filename
+        except Exception as e:
+            print(f"✗ Ошибка при создании файла макроса: {e}")
+            return None
 
-def create_vacation_schedule_new_format():
-    """Создает график отпусков с новым форматом листа сотрудников"""
-    
-    print("=" * 70)
-    print(f"ГЕНЕРАТОР ГРАФИКА ОТПУСКОВ {YEAR} (НОВЫЙ ФОРМАТ)")
-    print(f"Максимальное количество сотрудников: {MAX_EMPLOYEES}")
-    print(f"Отпусков на сотрудника: {VACATIONS_PER_EMPLOYEE}")
-    print(f"Компания: {COMPANY_NAME}")
-    print("=" * 70)
-    
-    # 1. ГЕНЕРИРУЕМ КАЛЕНДАРЬ
-    print("\n📅 Генерирую производственный календарь...")
-    calendar = get_russian_calendar(YEAR)
-    
-    # 2. СОЗДАЕМ ИМЯ ФАЙЛА
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"отпуск_{COMPANY_NAME.replace(' ', '_')}_{YEAR}_новый_{timestamp}.xlsx"
-    
-    print(f"\n📁 Создаю файл: {filename}")
-    
-    # 3. СОЗДАЕМ КНИГУ EXCEL
-    wb = Workbook()
-    
-    # Удаляем дефолтный лист
-    if "Sheet" in wb.sheetnames:
-        wb.remove(wb["Sheet"])
-    
-    # 4. СОЗДАЕМ ЛИСТ "СОТРУДНИКИ" (по новому формату)
-    print("👥 Создаю лист СОТРУДНИКИ (новый формат)...")
-    ws_employees = wb.create_sheet(title="СОТРУДНИКИ")
-    start_row, vacations_count = create_employees_sheet_new(ws_employees)
-    
-    # 5. СОЗДАЕМ ЛИСТ "ГРАФИК"
-    print("📊 Создаю лист ГРАФИК...")
-    ws_schedule = wb.create_sheet(title="ГРАФИК")
-    last_col = create_schedule_sheet_new(ws_schedule, calendar)
-    
-    # 6. СОЗДАЕМ ЛИСТ "ИНСТРУКЦИЯ"
-    print("📋 Создаю лист ИНСТРУКЦИЯ...")
-    ws_instructions = wb.create_sheet(title="ИНСТРУКЦИЯ")
-    create_instructions_sheet_new(ws_instructions)
-    
-    # 7. СОЗДАЕМ ЛИСТ "ЛЕГЕНДА"
-    print("🎨 Создаю лист ЛЕГЕНДА...")
-    ws_legend = wb.create_sheet(title="ЛЕГЕНДА")
-    
-    # Заголовок легенды
-    ws_legend.merge_cells('A1:C1')
-    legend_title = ws_legend['A1']
-    legend_title.value = "ЛЕГЕНДА - ОБОЗНАЧЕНИЯ В ГРАФИКЕ"
-    legend_title.font = Font(bold=True, size=14, color="1F497D")
-    legend_title.alignment = Alignment(horizontal="center")
-    
-    # Данные легенды
-    legend_data = [
-        ["Цвет/Символ", "Обозначение", "Описание"],
-        ["Белый фон", "Рабочий день", "Обычный рабочий день (понедельник-пятница)"],
-        ["Серый фон", "Выходной день", "Суббота, воскресенье"],
-        ["Красный фон + ✶", "Праздничный день", "Государственный праздник, нерабочий день"],
-        ["Желтый фон + ◐", "Предпраздничный день", "Сокращенный рабочий день (на 1 час)"],
-        ["Зеленый фон + ⚒", "Рабочая суббота", "Перенесенная рабочая суббота"],
-        ["Светло-зеленый + 'О'", "Отпуск сотрудника", "Период ежегодного оплачиваемого отпуска"],
-        ["", "", ""],
-        ["НОВЫЙ ФОРМАТ ЛИСТА 'СОТРУДНИКИ':", "", ""],
-        ["• Столбец A: Табельный номер (автоматическая нумерация)", "", ""],
-        ["• Столбец B: Фамилия И.О. (обязательно для заполнения)", "", ""],
-        [f"• Столбцы C-{get_column_letter(2 + VACATIONS_PER_EMPLOYEE * 2)}: Даты отпусков", "", ""],
-        ["• Пары столбцов: начало/конец каждого отпуска", "", ""],
-        [f"• Максимально отпусков на сотрудника: {VACATIONS_PER_EMPLOYEE}", "", ""],
-        ["• Пустые строки игнорируются при обновлении", "", ""],
-    ]
-    
-    for row_idx, row_data in enumerate(legend_data, start=3):
-        for col_idx, value in enumerate(row_data, start=1):
-            cell = ws_legend.cell(row=row_idx, column=col_idx, value=value)
-            if row_idx == 3 or "НОВЫЙ ФОРМАТ" in value:
-                cell.font = Font(bold=True)
-    
-    ws_legend.column_dimensions['A'].width = 25
-    ws_legend.column_dimensions['B'].width = 20
-    ws_legend.column_dimensions['C'].width = 45
-    
-    # 8. СОХРАНЯЕМ EXCEL ФАЙЛ
-    print(f"\n💾 Сохраняю файл: {filename}")
-    wb.save(filename)
-    
-    # 9. СОЗДАЕМ ИСПРАВЛЕННЫЙ МАКРОС
-    print("⚙️ Создаю макрос VBA для нового формата...")
-    macro_file = create_macro_file_new()
-    
-    # 10. ВЫВОД ИНФОРМАЦИИ
-    print("\n" + "=" * 70)
-    print("✅ ФАЙЛ С НОВЫМ ФОРМАТОМ УСПЕШНО СОЗДАН!")
-    print("=" * 70)
-    
-    print(f"\n📁 СОЗДАННЫЕ ФАЙЛЫ:")
-    print(f"   1. {filename} - Основной Excel файл (новый формат)")
-    print(f"   2. {macro_file} - Макрос VBA для нового формата")
-    
-    print(f"\n📊 ХАРАКТЕРИСТИКИ ФАЙЛА:")
-    print(f"   • Компания: {COMPANY_NAME}")
-    print(f"   • Год: {YEAR}")
-    print(f"   • Максимальное количество сотрудников: {MAX_EMPLOYEES}")
-    print(f"   • Отпусков на сотрудника: {VACATIONS_PER_EMPLOYEE}")
-    print(f"   • Столбцов в листе СОТРУДНИКИ: {2 + VACATIONS_PER_EMPLOYEE * 2}")
-    print(f"   • Листов в файле: 4 (СОТРУДНИКИ, ГРАФИК, ИНСТРУКЦИЯ, ЛЕГЕНДА)")
-    
-    print(f"\n🎯 ОСОБЕННОСТИ НОВОГО ФОРМАТА:")
-    print(f"   ✅ Только ФИО (без должности и отдела)")
-    print(f"   ✅ {VACATIONS_PER_EMPLOYEE} отпусков на сотрудника")
-    print(f"   ✅ Автоматическая нумерация табельных номеров")
-    print(f"   ✅ Простой формат: начало/конец отпуска")
-    print(f"   ✅ Макрос считает количество обработанных отпусков")
-    
-    print(f"\n🚀 КАК ИСПОЛЬЗОВАТЬ:")
-    print(f"   1. Откройте файл {filename}")
-    print(f"   2. Прочитайте инструкцию на листе 'ИНСТРУКЦИЯ'")
-    print(f"   3. Заполните данные на листе 'СОТРУДНИКИ'")
-    print(f"   4. Добавьте макрос из файла {macro_file}")
-    print(f"   5. Запустите макрос 'ОбновитьГрафик'")
-    
-    print(f"\n📝 ПРИМЕР ЗАПОЛНЕНИЯ ЛИСТА 'СОТРУДНИКИ':")
-    print(f"   Строка 4: | 1 | Иванов И.И. | 10.01.2026 | 25.01.2026 | ...")
-    print(f"   Строка 5: | 2 | Петров П.П. | 15.02.2026 | 25.02.2026 | ...")
-    print(f"   Строка 6: | 3 | (оставить пустой для будущего сотрудника) |")
-    
-    return filename, macro_file
 
 def main():
-    try:
-        excel_file, macro_file = create_vacation_schedule_new_format()
-        
-        print("\n" + "=" * 70)
-        print("🎯 НОВЫЙ ФОРМАТ ГОТОВ К ИСПОЛЬЗОВАНИЮ!")
+    """Основная функция"""
+    print("=" * 70)
+    print("ГЕНЕРАТОР ГРАФИКА ОТПУСКОВ С VBA МАКРОСОМ")
+    print(f"ПРОИЗВОДСТВЕННЫЙ КАЛЕНДАРЬ РОССИИ НА 2026 ГОД")
+    print("=" * 70)
+    
+    # Получаем название компании
+    company_name = input("\nВведите название компании: ").strip()
+    if not company_name:
+        company_name = "ООО РОГА И КОПЫТА"
+    
+    print("\n" + "=" * 70)
+    print("НАЧАЛО СОЗДАНИЯ ФАЙЛОВ...")
+    print("=" * 70)
+    
+    # Создаем генератор
+    generator = VacationScheduleGenerator(company_name)
+    
+    # Создаем файлы
+    excel_file = generator.create_excel_file()
+    macro_file = generator.create_vba_macro_file()
+    
+    print("\n" + "=" * 70)
+    
+    if excel_file and macro_file:
+        print("✓ ФАЙЛЫ УСПЕШНО СОЗДАНЫ")
+        print(f"  • Excel файл: {excel_file}")
+        print(f"  • Файл макроса: {macro_file}")
+        print("\nПроизводственный календарь 2026 года исправлен в листе 'ГРАФИК'")
+        print("Структура листа 'ГРАФИК':")
+        print("  • Строки 1-3: Заголовки календаря (месяцы, числа, дни недели)")
+        print("  • Строка 4: Заголовки столбцов данных ('№', 'ФИО СОТРУДНИКА')")
+        print("  • Строки 5-24: Данные 20 сотрудников")
         print("=" * 70)
-        
-        print(f"\n📋 СТРУКТУРА ЛИСТА 'СОТРУДНИКИ':")
-        print(f"   Столбец A: Табельный номер (1-{MAX_EMPLOYEES})")
-        print(f"   Столбец B: Фамилия И.О.")
-        print(f"   Столбцы C,D: Отпуск 1 (начало, конец)")
-        print(f"   Столбцы E,F: Отпуск 2 (начало, конец)")
-        print(f"   ...")
-        last_vac_col = get_column_letter(2 + VACATIONS_PER_EMPLOYEE * 2)
-        prev_vac_col = get_column_letter(2 + (VACATIONS_PER_EMPLOYEE - 1) * 2)
-        print(f"   Столбцы {prev_vac_col},{last_vac_col}: Отпуск {VACATIONS_PER_EMPLOYEE} (начало, конец)")
-        
-        print(f"\n⚙️ НАСТРОЙКИ ДЛЯ ИЗМЕНЕНИЯ:")
-        print(f"   MAX_EMPLOYEES = {MAX_EMPLOYEES}  # Макс. сотрудников")
-        print(f"   VACATIONS_PER_EMPLOYEE = {VACATIONS_PER_EMPLOYEE}  # Отпусков на сотрудника")
-        print(f"   COMPANY_NAME = '{COMPANY_NAME}'  # Название компании")
-        print(f"   YEAR = {YEAR}  # Год графика")
-        
-        input("\nНажмите Enter для завершения...")
-        
-    except Exception as e:
-        print(f"\n❌ Ошибка: {e}")
-        import traceback
-        traceback.print_exc()
-        input("\nНажмите Enter для выхода...")
+    else:
+        print("✗ ОШИБКА! Не удалось создать файлы.")
+
 
 if __name__ == "__main__":
     main()
