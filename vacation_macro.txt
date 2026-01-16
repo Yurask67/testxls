@@ -1,0 +1,292 @@
+Option Explicit
+
+Public Const MAX_EMPLOYEES As Integer = 20
+
+' Цвета для чередования месяцев
+Private Const COLOR_MONTH_1 As Long = &HF8F8F8     ' Светло-серый
+Private Const COLOR_MONTH_2 As Long = &HFFFFFF     ' Белый
+
+' Дни в месяцах 2026 года
+Private Const DAYS_IN_MONTHS As String = "31,29,31,30,31,30,31,31,30,31,30,31"
+
+' Цвет для отпуска
+Private Const VACATION_COLOR As Long = &HC6EFCE    ' Светло-зеленый
+
+Sub ОбновитьГрафик()
+    ' Макрос для обновления графика отпусков
+    ' Считывает данные с листа СОТРУДНИКИ и заполняет лист ГРАФИК
+    ' СОХРАНЯЕТ чередование цветов месяцев в области данных
+    
+    Dim wsEmployees As Worksheet
+    Dim wsSchedule As Worksheet
+    Dim wsService As Worksheet
+    
+    Dim lastRow As Long
+    Dim empRow As Long
+    Dim scheduleRow As Long
+    Dim dateCol As Long
+    
+    Dim startDate As Date
+    Dim endDate As Date
+    Dim currentDate As Date
+    
+    Dim employeeCount As Long
+    Dim vacationCount As Long
+    Dim periodCount As Long
+    
+    Dim i As Long, j As Long
+    Dim startCol As Long, endCol As Long
+    Dim foundDate As Range
+    
+    ' Отключаем обновление экрана для скорости
+    Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual
+    Application.EnableEvents = False
+    
+    On Error GoTo ErrorHandler
+    
+    ' Инициализация счетчиков
+    employeeCount = 0
+    vacationCount = 0
+    
+    ' Получаем ссылки на рабочие листы
+    Set wsEmployees = ThisWorkbook.Worksheets("СОТРУДНИКИ")
+    Set wsSchedule = ThisWorkbook.Worksheets("ГРАФИК")
+    Set wsService = ThisWorkbook.Worksheets("ДАТЫ")
+    
+    ' Очищаем предыдущий график (НО сохраняем цвет фона)
+    Call ОчиститьГрафикСФорматированием(wsSchedule)
+    
+    ' Находим последнюю строку с данными на листе СОТРУДНИКИ
+    lastRow = wsEmployees.Cells(wsEmployees.Rows.Count, "B").End(xlUp).Row
+    
+    ' Ограничиваем обработку максимум 20 сотрудниками
+    If lastRow > MAX_EMPLOYEES + 1 Then lastRow = MAX_EMPLOYEES + 1
+    
+    ' Обрабатываем каждого сотрудника
+    For i = 2 To lastRow
+        ' Проверяем, есть ли ФИО в строке
+        If Trim(wsEmployees.Cells(i, 2).Value) <> "" Then
+            employeeCount = employeeCount + 1
+            
+            ' Данные сотрудников начинаются с СТРОКИ 5 (строка 4 - заголовки)
+            scheduleRow = employeeCount + 4
+            
+            ' Копируем табельный номер и ФИО на лист ГРАФИК
+            wsSchedule.Cells(scheduleRow, 1).Value = wsEmployees.Cells(i, 1).Value
+            wsSchedule.Cells(scheduleRow, 2).Value = wsEmployees.Cells(i, 2).Value
+            
+            ' Восстанавливаем чередование цветов месяцев для этой строки
+            Call ВосстановитьЦветаМесяцев(wsSchedule, scheduleRow)
+            
+            ' Обрабатываем периоды отпусков (максимум 10 периодов)
+            periodCount = 0
+            For j = 1 To 10
+                startCol = 2 * j + 1  ' Столбцы: 3, 5, 7, 9, 11, 13, 15, 17, 19, 21
+                endCol = startCol + 1
+                
+                ' Проверяем, есть ли дата начала отпуска
+                If Not IsEmpty(wsEmployees.Cells(i, startCol).Value) Then
+                    If IsDate(wsEmployees.Cells(i, startCol).Value) Then
+                        startDate = CDate(wsEmployees.Cells(i, startCol).Value)
+                        
+                        ' Проверяем, есть ли дата окончания отпуска
+                        If Not IsEmpty(wsEmployees.Cells(i, endCol).Value) Then
+                            If IsDate(wsEmployees.Cells(i, endCol).Value) Then
+                                endDate = CDate(wsEmployees.Cells(i, endCol).Value)
+                                
+                                ' Проверяем корректность дат (конец не раньше начала)
+                                If endDate >= startDate Then
+                                    periodCount = periodCount + 1
+                                    vacationCount = vacationCount + 1
+                                    
+                                    ' Отмечаем все дни отпуска на графике
+                                    currentDate = startDate
+                                    Do While currentDate <= endDate
+                                        ' Ищем столбец с этой датой на служебном листе
+                                        Set foundDate = wsService.Rows(1).Find( _
+                                            What:=currentDate, _
+                                            LookIn:=xlFormulas, _
+                                            LookAt:=xlWhole, _
+                                            SearchOrder:=xlByColumns, _
+                                            SearchDirection:=xlNext)
+                                        
+                                        If Not foundDate Is Nothing Then
+                                            dateCol = foundDate.Column
+                                            
+                                            ' Заполняем ячейку на графике (ЦВЕТ НАКЛАДЫВАЕТСЯ ПОВЕРХ цвета месяца)
+                                            With wsSchedule.Cells(scheduleRow, dateCol)
+                                                .Value = "О"  ' Буква О - отпуск
+                                                .Interior.Color = VACATION_COLOR  ' Светло-зеленый
+                                                .Font.Bold = True
+                                                .Font.Name = "Arial"
+                                                .Font.Size = 9
+                                                .HorizontalAlignment = xlCenter
+                                                .VerticalAlignment = xlCenter
+                                            End With
+                                        End If
+                                        
+                                        currentDate = currentDate + 1
+                                    Loop
+                                End If
+                            End If
+                        End If
+                    End If
+                End If
+            Next j
+        End If
+    Next i
+    
+    ' Автоподбор ширины столбца с ФИО
+    wsSchedule.Columns("B:B").AutoFit
+    
+    ' Восстанавливаем настройки Excel
+    Application.ScreenUpdating = True
+    Application.Calculation = xlCalculationAutomatic
+    Application.EnableEvents = True
+    
+    ' Показываем информационное сообщение
+    MsgBox "График отпусков успешно обновлен!" & vbCrLf & _
+           "Обработано сотрудников: " & employeeCount & vbCrLf & _
+           "Найдено периодов отпуска: " & vacationCount & vbCrLf & _
+           "Чередование цветов месяцев сохранено.", _
+           vbInformation + vbOKOnly, _
+           "Обновление графика отпусков"
+    
+    ' Активируем лист с графиком
+    wsSchedule.Activate
+    wsSchedule.Range("A1").Select
+    
+    Exit Sub
+
+ErrorHandler:
+    ' Восстанавливаем настройки при ошибке
+    Application.ScreenUpdating = True
+    Application.Calculation = xlCalculationAutomatic
+    Application.EnableEvents = True
+    
+    ' Показываем сообщение об ошибке
+    MsgBox "Произошла ошибка при обновления графика!" & vbCrLf & _
+           "Код ошибки: " & Err.Number & vbCrLf & _
+           "Описание: " & Err.Description & vbCrLf & _
+           "Проверьте:" & vbCrLf & _
+           "1. Корректность формата дат" & vbCrLf & _
+           "2. Наличие ФИО в строках" & vbCrLf & _
+           "3. Что дата окончания не раньше даты начала", _
+           vbCritical + vbOKOnly, _
+           "Ошибка обновления графика"
+End Sub
+
+Private Sub ОчиститьГрафикСФорматированием(wsSchedule As Worksheet)
+    ' Очистка данных на листе ГРАФИК (сохраняет цвета месяцев)
+    
+    Dim lastRow As Long
+    Dim lastCol As Long
+    Dim i As Long, j As Long
+    
+    ' Находим последнюю строку с данными (начинаем поиск со строки 5)
+    lastRow = wsSchedule.Cells(wsSchedule.Rows.Count, "B").End(xlUp).Row
+    
+    ' Если есть данные для очистки (данные начинаются с строки 5)
+    If lastRow >= 5 Then
+        ' Очищаем номера и ФИО сотрудников (строки 5 и ниже)
+        wsSchedule.Range("A5:B" & lastRow).ClearContents
+        
+        ' Находим последний столбец с датами
+        lastCol = wsSchedule.Cells(3, wsSchedule.Columns.Count).End(xlToLeft).Column
+        
+        ' Очищаем отметки об отпусках (начиная с колонки C, строки 5 и ниже)
+        If lastCol >= 3 Then
+            ' Очищаем содержимое, НО НЕ форматирование
+            For i = 5 To lastRow
+                For j = 3 To lastCol
+                    With wsSchedule.Cells(i, j)
+                        .Value = ""  ' Очищаем только значение
+                        .Font.Bold = False
+                    End With
+                Next j
+            Next i
+            
+            ' Восстанавливаем цвета месяцев для всех строк данных
+            For i = 5 To lastRow
+                Call ВосстановитьЦветаМесяцев(wsSchedule, i)
+            Next i
+        End If
+    End If
+End Sub
+
+Private Sub ВосстановитьЦветаМесяцев(wsSchedule As Worksheet, rowNum As Long)
+    ' Восстанавливает чередование цветов месяцев для указанной строки
+    
+    Dim monthDays() As String
+    Dim i As Long, j As Long
+    Dim col As Long
+    Dim monthColor As Long
+    Dim daysInMonth As Integer
+    
+    ' Разбиваем строку с днями в месяцах
+    monthDays = Split(DAYS_IN_MONTHS, ",")
+    
+    ' Начинаем с колонки C (3)
+    col = 3
+    
+    ' Проходим по всем месяцам
+    For i = 0 To UBound(monthDays)
+        daysInMonth = CInt(monthDays(i))
+        
+        ' Определяем цвет для месяца (чередование)
+        If (i Mod 2) = 0 Then
+            monthColor = COLOR_MONTH_1  ' Нечетные месяцы: светло-серый
+        Else
+            monthColor = COLOR_MONTH_2  ' Четные месяцы: белый
+        End If
+        
+        ' Применяем цвет ко всем дням месяца в указанной строки
+        For j = 1 To daysInMonth
+            With wsSchedule.Cells(rowNum, col)
+                .Interior.Color = monthColor
+            End With
+            col = col + 1
+        Next j
+    Next i
+End Sub
+
+Sub ТестовыеДанные()
+    ' Процедура для заполнения тестовых данных
+    
+    Dim ws As Worksheet
+    Dim i As Long
+    
+    Set ws = ThisWorkbook.Worksheets("СОТРУДНИКИ")
+    
+    ' Очищаем старые данные (кроме заголовков)
+    ws.Range("A2:V21").ClearContents
+    
+    ' Восстанавливаем номера строк
+    For i = 1 To 20
+        ws.Cells(i + 1, 1).Value = i
+    Next i
+    
+    ' Заполняем тестовые данные
+    ws.Cells(2, 2).Value = "Иванов И.И."
+    ws.Cells(2, 3).Value = DateSerial(2026, 6, 1)
+    ws.Cells(2, 4).Value = DateSerial(2026, 6, 14)
+    
+    ws.Cells(3, 2).Value = "Петров П.П."
+    ws.Cells(3, 3).Value = DateSerial(2026, 7, 15)
+    ws.Cells(3, 4).Value = DateSerial(2026, 7, 28)
+    
+    ws.Cells(4, 2).Value = "Сидоров С.С."
+    ws.Cells(4, 3).Value = DateSerial(2026, 8, 1)
+    ws.Cells(4, 4).Value = DateSerial(2026, 8, 14)
+    
+    ' Форматируем даты
+    ws.Range("C2:V21").NumberFormat = "DD.MM.YYYY"
+    
+    ' Автоподбор ширины столбцов
+    ws.Columns("A:V").AutoFit
+    
+    MsgBox "Тестовые данные успешно добавлены!" & vbCrLf & _
+           "Запустите макрос 'ОбновитьГрафик' для построения графика.", _
+           vbInformation, "Тестовые данные"
+End Sub

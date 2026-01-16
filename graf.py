@@ -25,7 +25,7 @@
 
 ИСПРАВЛЕННЫЕ ОШИБКИ:
 - Заголовки календаря (строки 1-3) НЕ совпадают с данными сотрудников
-- Данные сотрудников начинаются с строки 5 (строка 4 - только заголовки столбцов)
+- Данные сотрудников начинаются с строкя 5 (строка 4 - только заголовки столбцов)
 - VBA макрос корректно рассчитывает строки: scheduleRow = employeeCount + 4
 - Очистка графика начинается со строки 5
 - Производственный календарь 2026 года исправлен
@@ -194,73 +194,286 @@ class VacationScheduleGenerator:
             return None
     
     def _create_employees_sheet(self, ws):
-        """Создание листа СОТРУДНИКИ"""
+        """Создание листа СОТРУДНИКИ с новым форматом (блоки сотрудников по горизонтали)"""
         print("  Создание листа 'СОТРУДНИКИ'...")
         
-        # Заголовки
-        headers = ["Табельный номер", "Фамилия И.О."]
-        for i in range(1, self.vacation_pairs + 1):
-            headers.append(f"Отпуск {i} начало")
-            headers.append(f"Отпуск {i} конец")
+        # Скрываем сетку для лучшего восприятия
+        ws.sheet_view.showGridLines = False
         
-        # Записываем заголовки
-        for col, header in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col, value=header)
-            cell.font = Font(bold=True, size=11)
-            cell.fill = PatternFill(start_color="E0E0E0", fill_type="solid")
-            cell.alignment = Alignment(horizontal="center", vertical="center")
+        # Ширина столбцов для блоков
+        block_width = 4  # колонки на одного сотрудника
+        date_width = 12
+        days_width = 8
+        name_width = 25
         
-        # Заполняем табельные номера
-        for row in range(2, self.max_employees + 2):
-            ws.cell(row=row, column=1, value=row-1)
-            ws.cell(row=row, column=1).alignment = Alignment(horizontal="center")
+        # Настройки шрифтов
+        header_font = Font(bold=True, size=11, color="FFFFFF")
+        data_font = Font(size=10)
+        total_font = Font(bold=True, size=10)
         
-        # Настраиваем ширину столбцов
-        ws.column_dimensions['A'].width = 12
-        ws.column_dimensions['B'].width = 25
-        for col in range(3, len(headers) + 1):
-            ws.column_dimensions[get_column_letter(col)].width = 14
+        # Цвета
+        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")  # Синий
+        name_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")     # Светло-синий
+        days_fill = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")     # Светло-зеленый
         
         # Формат дат
         date_format = 'DD.MM.YYYY'
-        for row in range(2, self.max_employees + 2):
-            for col in range(3, len(headers) + 1):
-                ws.cell(row=row, column=col).number_format = date_format
         
-        # Пример данных
+        # Размеры блока
+        BLOCK_COLS = 4  # ФИО, Дни всего, Дата начала, Дата конца
+        MAX_PERIODS = 10  # Максимальное количество периодов отпуска
+        
+        for emp_index in range(self.max_employees):
+            # Определяем начальную колонку для блока сотрудника
+            start_col = emp_index * BLOCK_COLS + 1
+            
+            # --- ЗАГОЛОВКИ БЛОКА ---
+            # Строка 1: Заголовки столбцов
+            headers = ["ФИО", "дни всего", "", ""]
+            for col_offset, header in enumerate(headers):
+                col = start_col + col_offset
+                cell = ws.cell(row=1, column=col, value=header)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.border = Border(
+                    left=Side(style='thin', color="000000"),
+                    right=Side(style='thin', color="000000"),
+                    top=Side(style='thin', color="000000"),
+                    bottom=Side(style='thin', color="000000")
+                )
+            
+            # Строка 2: Пустая строка (отступ)
+            for col_offset in range(BLOCK_COLS):
+                col = start_col + col_offset
+                cell = ws.cell(row=2, column=col, value="")
+                cell.border = Border(
+                    left=Side(style='thin', color="000000"),
+                    right=Side(style='thin', color="000000"),
+                    top=Side(style='thin', color="000000"),
+                    bottom=Side(style='thin', color="000000")
+                )
+            
+            # --- ДАННЫЕ СОТРУДНИКА ---
+            # Строка 3: ФИО и общее количество дней
+            # Ячейка ФИО
+            name_cell = ws.cell(row=3, column=start_col, value=f"Сотрудник {emp_index+1}")
+            name_cell.font = Font(bold=True, size=10)
+            name_cell.fill = name_fill
+            name_cell.alignment = Alignment(horizontal="left", vertical="center")
+            name_cell.border = Border(
+                left=Side(style='thin', color="000000"),
+                right=Side(style='thin', color="000000"),
+                top=Side(style='thin', color="000000"),
+                bottom=Side(style='thin', color="000000")
+            )
+            
+            # Ячейка "дни всего" (пока пустая)
+            days_cell = ws.cell(row=3, column=start_col+1, value="")
+            days_cell.font = total_font
+            days_cell.fill = days_fill
+            days_cell.alignment = Alignment(horizontal="center", vertical="center")
+            days_cell.border = Border(
+                left=Side(style='thin', color="000000"),
+                right=Side(style='thin', color="000000"),
+                top=Side(style='thin', color="000000"),
+                bottom=Side(style='thin', color="000000")
+            )
+            
+            # Пустые ячейки справа
+            for col_offset in range(2, BLOCK_COLS):
+                col = start_col + col_offset
+                cell = ws.cell(row=3, column=col, value="")
+                cell.border = Border(
+                    left=Side(style='thin', color="000000"),
+                    right=Side(style='thin', color="000000"),
+                    top=Side(style='thin', color="000000"),
+                    bottom=Side(style='thin', color="000000")
+                )
+            
+            # --- ПЕРИОДЫ ОТПУСКОВ ---
+            # Периоды начинаются с строки 4
+            for period_idx in range(MAX_PERIODS):
+                row = 4 + period_idx
+                
+                # Дата начала отпуска
+                start_cell = ws.cell(row=row, column=start_col+2, value="")
+                start_cell.number_format = date_format
+                start_cell.font = data_font
+                start_cell.alignment = Alignment(horizontal="center", vertical="center")
+                start_cell.border = Border(
+                    left=Side(style='thin', color="000000"),
+                    right=Side(style='thin', color="000000"),
+                    top=Side(style='thin', color="000000"),
+                    bottom=Side(style='thin', color="000000")
+                )
+                
+                # Дата окончания отпуска
+                end_cell = ws.cell(row=row, column=start_col+3, value="")
+                end_cell.number_format = date_format
+                end_cell.font = data_font
+                end_cell.alignment = Alignment(horizontal="center", vertical="center")
+                end_cell.border = Border(
+                    left=Side(style='thin', color="000000"),
+                    right=Side(style='thin', color="000000"),
+                    top=Side(style='thin', color="000000"),
+                    bottom=Side(style='thin', color="000000")
+                )
+                
+                # Количество дней в периоде (будет рассчитываться формулой)
+                days_period_cell = ws.cell(row=row, column=start_col+1, value="")
+                days_period_cell.font = data_font
+                days_period_cell.alignment = Alignment(horizontal="center", vertical="center")
+                days_period_cell.border = Border(
+                    left=Side(style='thin', color="000000"),
+                    right=Side(style='thin', color="000000"),
+                    top=Side(style='thin', color="000000"),
+                    bottom=Side(style='thin', color="000000")
+                )
+                
+                # Ячейка ФИО для выравнивания (пустая)
+                empty_cell = ws.cell(row=row, column=start_col, value="")
+                empty_cell.border = Border(
+                    left=Side(style='thin', color="000000"),
+                    right=Side(style='thin', color="000000"),
+                    top=Side(style='thin', color="000000"),
+                    bottom=Side(style='thin', color="000000")
+                )
+            
+            # --- ПОДВАЛ БЛОКА ---
+            # Последняя строка с многоточиями
+            last_row = 4 + MAX_PERIODS
+            
+            for col_offset in range(BLOCK_COLS):
+                col = start_col + col_offset
+                cell = ws.cell(row=last_row, column=col, value="...")
+                cell.font = Font(size=9, italic=True, color="666666")
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.border = Border(
+                    left=Side(style='thin', color="000000"),
+                    right=Side(style='thin', color="000000"),
+                    top=Side(style='thin', color="000000"),
+                    bottom=Side(style='thin', color="000000")
+                )
+            
+            # Настраиваем ширину столбцов
+            ws.column_dimensions[get_column_letter(start_col)].width = name_width      # ФИО
+            ws.column_dimensions[get_column_letter(start_col+1)].width = days_width    # дни всего
+            ws.column_dimensions[get_column_letter(start_col+2)].width = date_width    # дата начала
+            ws.column_dimensions[get_column_letter(start_col+3)].width = date_width    # дата окончания
+            
+            # Добавляем вертикальный отступ между блоками
+            if emp_index < self.max_employees - 1:
+                separator_col = start_col + BLOCK_COLS
+                ws.column_dimensions[get_column_letter(separator_col)].width = 2
+        
+        # Добавляем формулу для расчета дней в каждом периоде
+        self._add_formulas_for_days(ws)
+        
+        # Добавляем пример данных для первых трех сотрудников
+        self._add_example_data(ws)
+        
+        print(f"  ✓ Лист 'СОТРУДНИКИ' создан с {self.max_employees} блоками сотрудников")
+    
+    def _add_formulas_for_days(self, ws):
+        """Добавляем формулы Excel для расчета количества дней отпуска"""
+        # Для каждого сотрудника (20 сотрудников)
+        for emp_idx in range(self.max_employees):
+            start_col = emp_idx * 4 + 1  # Каждый блок занимает 4 колонки
+            
+            # Для каждого периода (10 периодов)
+            for period_idx in range(self.vacation_pairs):
+                row = 4 + period_idx
+                
+                # Формула для расчета дней в периоде: =ЕСЛИ(И(C5<>"";D5<>"");D5-C5+1;"")
+                # Где C5 - дата начала, D5 - дата окончания
+                start_col_letter = get_column_letter(start_col + 2)  # Колонка даты начала
+                end_col_letter = get_column_letter(start_col + 3)    # Колонка даты окончания
+                
+                # Ячейка для количества дней в периоде (вторая колонка блока)
+                days_cell = ws.cell(row=row, column=start_col+1)
+                formula = f'=IF(AND({start_col_letter}{row}<>"",{end_col_letter}{row}<>""),{end_col_letter}{row}-{start_col_letter}{row}+1,"")'
+                days_cell.value = formula
+                days_cell.number_format = '0'  # Целое число
+        
+        # Формула для итогового количества дней (строка 3, вторая колонка каждого блока)
+        for emp_idx in range(self.max_employees):
+            start_col = emp_idx * 4 + 1
+            total_row = 3
+            total_col = start_col + 1
+            
+            # Собираем ссылки на все ячейки с днями периодов для этого сотрудника
+            period_refs = []
+            for period_idx in range(self.vacation_pairs):
+                row = 4 + period_idx
+                period_refs.append(f'{get_column_letter(start_col+1)}{row}')
+            
+            # Формула для суммы: =СУММ(B5:B14)
+            total_formula = f'=SUM({":".join(period_refs)})'
+            total_cell = ws.cell(row=total_row, column=total_col)
+            total_cell.value = total_formula
+    
+    def _add_example_data(self, ws):
+        """Добавляем пример данных для первых трех сотрудников"""
         example_data = [
-            ["Иванов И.И.", datetime.date(self.year, 6, 1), datetime.date(self.year, 6, 14)],
-            ["Петров П.П.", datetime.date(self.year, 7, 15), datetime.date(self.year, 7, 28)],
-            ["Сидоров С.С.", datetime.date(self.year, 8, 1), datetime.date(self.year, 8, 14)],
+            # Сотрудник 1
+            {
+                'name': 'Иванов И.И.',
+                'periods': [
+                    (datetime.date(2026, 1, 10), datetime.date(2026, 1, 20)),  # 11 дней
+                    (datetime.date(2026, 3, 20), datetime.date(2026, 3, 25)),  # 6 дней
+                    (datetime.date(2026, 6, 15), datetime.date(2026, 6, 20)),  # 6 дней
+                ]
+            },
+            # Сотрудник 2
+            {
+                'name': 'Петров П.П.',
+                'periods': [
+                    (datetime.date(2026, 7, 15), datetime.date(2026, 7, 28)),  # 14 дней
+                ]
+            },
+            # Сотрудник 3
+            {
+                'name': 'Сидоров С.С.',
+                'periods': [
+                    (datetime.date(2026, 8, 1), datetime.date(2026, 8, 14)),  # 14 дней
+                ]
+            }
         ]
         
-        for i, data in enumerate(example_data):
-            row = i + 2
-            ws.cell(row=row, column=2, value=data[0])
-            if len(data) > 1:
-                ws.cell(row=row, column=3, value=data[1])
-                ws.cell(row=row, column=4, value=data[2])
-        
-        # Закрепляем заголовки
-        ws.freeze_panes = 'A2'
-        
-        print("  ✓ Лист 'СОТРУДНИКИ' создан")
+        for emp_idx, data in enumerate(example_data):
+            if emp_idx >= 3:  # Только первые 3 сотрудника
+                break
+                
+            start_col = emp_idx * 4 + 1
+            
+            # ФИО
+            ws.cell(row=3, column=start_col, value=data['name'])
+            
+            # Периоды отпусков
+            for period_idx, (start_date, end_date) in enumerate(data['periods']):
+                if period_idx >= self.vacation_pairs:
+                    break
+                    
+                row = 4 + period_idx
+                ws.cell(row=row, column=start_col+2, value=start_date)  # Дата начала
+                ws.cell(row=row, column=start_col+3, value=end_date)    # Дата окончания
     
     def _create_schedule_sheet(self, ws):
-        """Создание листа ГРАФИК с чередованием цветов месяцев ТОЛЬКО для области данных"""
+        """Создание листа ГРАФИК с исправленным отображением сотрудников"""
         print("  Создание листа 'ГРАФИК'...")
         
         # Настраиваем ширину
         ws.column_dimensions['A'].width = 6
         ws.column_dimensions['B'].width = 25
         
-        # Заголовки столбцов данных (№ и ФИО) - ТОЛЬКО В СТРОКЕ 4
+        # Заголовки столбцов данных - КОРРЕКТИРУЕМ
         ws.cell(row=4, column=1, value="№").font = Font(bold=True)
         ws.cell(row=4, column=2, value="ФИО СОТРУДНИКА").font = Font(bold=True)
         
         # Центрируем заголовки данных
         ws.cell(row=4, column=1).alignment = Alignment(horizontal="center", vertical="center")
-        ws.cell(row=4, column=2).alignment = Alignment(horizontal="center", vertical="center")
+        ws.cell(row=4, column=2).alignment = Alignment(horizontal="left", vertical="center")
         
         # Заливка для заголовков данных
         header_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
@@ -287,15 +500,8 @@ class VacationScheduleGenerator:
         month_colors = ['F8F8F8', 'FFFFFF']  # Чередующиеся цвета для месяцев
         
         # Создаем заголовки календаря (строки 1-3)
-        month_start_cols = []  # Для хранения начала каждого месяца
-        month_color_indices = []  # Для хранения цветовых индексов месяцев
-        
         for month_idx, month in enumerate(range(1, 13)):
             days_in_month = calendar.monthrange(self.year, month)[1]
-            
-            # Сохраняем информацию о начале месяца
-            month_start_cols.append(current_col)
-            month_color_indices.append(month_idx % 2)
             
             # Объединяем ячейки для названия месяца (СТРОКА 1)
             start_col = current_col
@@ -352,7 +558,7 @@ class VacationScheduleGenerator:
                     if day_info.day_type == 'праздник':
                         fill_color = colors['праздник']
                     elif day_info.day_type == 'выходной':
-                        fill_color = colors['выходной']
+                        fill_color = colors['выходinal']
                     elif day_info.day_type == 'рабочая суббота':
                         fill_color = colors['рабочая суббота']
                     # Для рабочих дней оставляем белый цвет
@@ -367,7 +573,6 @@ class VacationScheduleGenerator:
             current_col += days_in_month
         
         # Применяем чередование цветов ТОЛЬКО к области данных (строки 5+) 
-        # ИСПРАВЛЕНИЕ: Сохраняем информацию о цветах месяцев для VBA макроса
         data_start_row = 5  # Данные сотрудников начинаются с строки 5
         data_end_row = data_start_row + self.max_employees - 1  # Строка 24
         
@@ -388,6 +593,7 @@ class VacationScheduleGenerator:
                 col += 1
         
         # Добавляем строки для сотрудников (начинаем с СТРОКИ 5)
+        # ТОЛЬКО номера сотрудников - ФИО будут заполняться макросом из листа СОТРУДНИКИ
         for i in range(1, self.max_employees + 1):
             row = i + 4  # Строка 5 и ниже (строка 4 - заголовки данных)
             
@@ -396,9 +602,10 @@ class VacationScheduleGenerator:
             num_cell.alignment = Alignment(horizontal="center", vertical="center")
             num_cell.font = Font(size=10)
             
-            # ФИО (заполнится макросом)
-            name_cell = ws.cell(row=row, column=2, value=f"Сотрудник {i}")
+            # Ячейка для ФИО (оставляем пустой - заполнится макросом)
+            name_cell = ws.cell(row=row, column=2)
             name_cell.font = Font(size=10)
+            name_cell.alignment = Alignment(horizontal="left", vertical="center")
             
             # Форматируем строки данных
             for col in range(1, current_col):
@@ -410,6 +617,8 @@ class VacationScheduleGenerator:
                     bottom=Side(style='thin')
                 )
                 cell.alignment = Alignment(vertical="center", horizontal="center")
+            # Для столбца с ФИО выравнивание слева
+            ws.cell(row=row, column=2).alignment = Alignment(vertical="center", horizontal="left")
         
         # Закрепляем области: строка 4 (заголовки данных) и колонки A,B
         ws.freeze_panes = 'C5'
@@ -423,7 +632,7 @@ class VacationScheduleGenerator:
         footer.font = Font(italic=True, size=10, color="666666")
         footer.alignment = Alignment(horizontal="center")
         
-        print(f"  ✓ Лист 'ГРАФИК' создан с чередованием цветов месяцев ТОЛЬКО в области данных ({current_col-3} дней)")
+        print(f"  ✓ Лист 'ГРАФИК' создан ({current_col-3} дней)")
     
     def _create_dates_sheet(self, ws):
         """Создание служебного листа с датами"""
@@ -516,20 +725,23 @@ class VacationScheduleGenerator:
             ("", 1, False, False),
             ("ШАГ 2: ЗАПОЛНЕНИЕ ДАННЫХ", 14, True, False),
             ("1. Перейдите на лист 'СОТРУДНИКИ'", 11, False, False),
-            ("2. Заполните столбец 'Фамилия И.О.'", 11, False, False),
-            ("3. Заполните даты отпусков в столбцах 'Отпуск N начало/конец'", 11, False, False),
+            ("2. Заполните столбец 'ФИО' в каждом блоке сотрудника", 11, False, False),
+            ("3. Заполните даты отпусков в столбцах 'Дата начала' и 'Дата окончания'", 11, False, False),
             ("4. Формат дат: ДД.ММ.ГГГГ (например: 15.06.2026)", 11, False, False),
+            ("5. Количество дней рассчитывается автоматически", 11, False, False),
             ("", 1, False, False),
             ("ШАГ 3: ЗАПУСК ГРАФИКА", 14, True, False),
             ("1. Нажмите Alt+F8 для открытия диалога макросов", 11, False, False),
             ("2. Выберите макрос 'ОбновитьГрафик' → 'Выполнить'", 11, False, False),
             ("3. Перейдите на лист 'ГРАФИК' для просмотра", 11, False, False),
             ("", 1, False, False),
-            ("ВАЖНО!", 14, True, False),
-            ("• Максимальное количество сотрудников: 20", 11, False, False),
-            ("• Максимальное количество периодов отпуска: 10 на сотрудника", 11, False, False),
-            ("• При изменении дат отпуска перезапустите макрос", 11, False, False),
-            ("• Пустые строки (без ФИО) игнорируются", 11, False, False),
+            ("ВАЖНОЕ ИЗМЕНЕНИЕ В ФОРМАТЕ!", 14, True, False),
+            ("• Теперь каждый сотрудник имеет отдельный блок из 4 колонок", 11, False, False),
+            ("• Структура блока: ФИО | дни всего | Дата начала | Дата окончания", 11, False, False),
+            ("• До 10 периодов отпуска на сотрудника", 11, False, False),
+            ("• Количество дней рассчитывается автоматически формулой", 11, False, False),
+            ("• Формула: =ЕСЛИ(И(дата_начала<>"";дата_конца<>"");дата_конца-дата_начала+1;"")", 11, False, False),
+            ("• Итоговые дни: =СУММ(диапазон_дней_периодов)", 11, False, False),
         ]
         
         for i, (text, size, bold, center) in enumerate(content, 1):
@@ -541,12 +753,14 @@ class VacationScheduleGenerator:
         print("  ✓ Лист 'ИНСТРУКЦИЯ' создан")
     
     def create_vba_macro_file(self):
-        """Создание файла с VBA макросом (ИСПРАВЛЕННЫЙ - сохраняет чередование цветов месяцев)"""
+        """Создание файла с VBA макросом для нового формата листа СОТРУДНИКИ"""
         print("\nСоздание файла с VBA макросом...")
         
         vba_code = '''Option Explicit
 
 Public Const MAX_EMPLOYEES As Integer = 20
+Public Const BLOCK_COLS As Integer = 4         ' Колонок на одного сотрудника (ФИО, дни, начало, конец)
+Public Const MAX_PERIODS As Integer = 10       ' Максимальное количество периодов отпуска
 
 ' Цвета для чередования месяцев
 Private Const COLOR_MONTH_1 As Long = &HF8F8F8     ' Светло-серый
@@ -560,29 +774,27 @@ Private Const VACATION_COLOR As Long = &HC6EFCE    ' Светло-зеленый
 
 Sub ОбновитьГрафик()
     ' Макрос для обновления графика отпусков
-    ' Считывает данные с листа СОТРУДНИКИ и заполняет лист ГРАФИК
-    ' СОХРАНЯЕТ чередование цветов месяцев в области данных
+    ' Считывает данные с листа СОТРУДНИКИ (новый формат) и заполняет лист ГРАФИК
     
     Dim wsEmployees As Worksheet
     Dim wsSchedule As Worksheet
     Dim wsService As Worksheet
     
-    Dim lastRow As Long
-    Dim empRow As Long
-    Dim scheduleRow As Long
-    Dim dateCol As Long
+    Dim employeeCount As Long
+    Dim vacationCount As Long
+    Dim i As Long, j As Long
+    Dim empBlockStart As Long
     
     Dim startDate As Date
     Dim endDate As Date
     Dim currentDate As Date
-    
-    Dim employeeCount As Long
-    Dim vacationCount As Long
-    Dim periodCount As Long
-    
-    Dim i As Long, j As Long
-    Dim startCol As Long, endCol As Long
+    Dim dateCol As Long
     Dim foundDate As Range
+    
+    Dim scheduleRow As Long
+    Dim nameCell As Range
+    Dim startDateCell As Range
+    Dim endDateCell As Range
     
     ' Отключаем обновление экрана для скорости
     Application.ScreenUpdating = False
@@ -603,79 +815,76 @@ Sub ОбновитьГрафик()
     ' Очищаем предыдущий график (НО сохраняем цвет фона)
     Call ОчиститьГрафикСФорматированием(wsSchedule)
     
-    ' Находим последнюю строку с данными на листе СОТРУДНИКИ
-    lastRow = wsEmployees.Cells(wsEmployees.Rows.Count, "B").End(xlUp).Row
-    
-    ' Ограничиваем обработку максимум 20 сотрудниками
-    If lastRow > MAX_EMPLOYEES + 1 Then lastRow = MAX_EMPLOYEES + 1
-    
-    ' Обрабатываем каждого сотрудника
-    For i = 2 To lastRow
-        ' Проверяем, есть ли ФИО в строке
-        If Trim(wsEmployees.Cells(i, 2).Value) <> "" Then
+    ' Обрабатываем каждого сотрудника (максимум 20)
+    For i = 0 To MAX_EMPLOYEES - 1
+        ' Определяем начало блока сотрудника
+        empBlockStart = i * BLOCK_COLS + 1  ' A=1, E=5, I=9, M=13, Q=17, U=21 и т.д.
+        
+        ' Ячейка с ФИО (строка 3, первая колонка блока)
+        Set nameCell = wsEmployees.Cells(3, empBlockStart)
+        
+        ' Проверяем, есть ли ФИО в ячейке
+        If Trim(nameCell.Value) <> "" Then
             employeeCount = employeeCount + 1
             
             ' Данные сотрудников начинаются с СТРОКИ 5 (строка 4 - заголовки)
             scheduleRow = employeeCount + 4
             
-            ' Копируем табельный номер и ФИО на лист ГРАФИК
-            wsSchedule.Cells(scheduleRow, 1).Value = wsEmployees.Cells(i, 1).Value
-            wsSchedule.Cells(scheduleRow, 2).Value = wsEmployees.Cells(i, 2).Value
+            ' Заполняем номер и ФИО на листе ГРАФИК
+            wsSchedule.Cells(scheduleRow, 1).Value = employeeCount
+            wsSchedule.Cells(scheduleRow, 2).Value = nameCell.Value
             
             ' Восстанавливаем чередование цветов месяцев для этой строки
             Call ВосстановитьЦветаМесяцев(wsSchedule, scheduleRow)
             
-            ' Обрабатываем периоды отпусков (максимум 10 периодов)
-            periodCount = 0
-            For j = 1 To 10
-                startCol = 2 * j + 1  ' Столбцы: 3, 5, 7, 9, 11, 13, 15, 17, 19, 21
-                endCol = startCol + 1
+            ' Обрабатываем периоды отпусков для этого сотрудника
+            For j = 0 To MAX_PERIODS - 1
+                ' Строка для периода (начинается с строки 4)
+                Dim periodRow As Long
+                periodRow = 4 + j
                 
-                ' Проверяем, есть ли дата начала отпуска
-                If Not IsEmpty(wsEmployees.Cells(i, startCol).Value) Then
-                    If IsDate(wsEmployees.Cells(i, startCol).Value) Then
-                        startDate = CDate(wsEmployees.Cells(i, startCol).Value)
+                ' Ячейки с датами начала и окончания отпуска
+                Set startDateCell = wsEmployees.Cells(periodRow, empBlockStart + 2)  ' Третья колонка блока
+                Set endDateCell = wsEmployees.Cells(periodRow, empBlockStart + 3)    ' Четвертая колонка блока
+                
+                ' Проверяем, есть ли обе даты
+                If Not IsEmpty(startDateCell.Value) And Not IsEmpty(endDateCell.Value) Then
+                    If IsDate(startDateCell.Value) And IsDate(endDateCell.Value) Then
+                        startDate = CDate(startDateCell.Value)
+                        endDate = CDate(endDateCell.Value)
                         
-                        ' Проверяем, есть ли дата окончания отпуска
-                        If Not IsEmpty(wsEmployees.Cells(i, endCol).Value) Then
-                            If IsDate(wsEmployees.Cells(i, endCol).Value) Then
-                                endDate = CDate(wsEmployees.Cells(i, endCol).Value)
+                        ' Проверяем корректность дат (конец не раньше начала)
+                        If endDate >= startDate Then
+                            vacationCount = vacationCount + 1
+                            
+                            ' Отмечаем все дни отпуска на графике
+                            currentDate = startDate
+                            Do While currentDate <= endDate
+                                ' Ищем столбец с этой датой на служебном листе
+                                Set foundDate = wsService.Rows(1).Find( _
+                                    What:=currentDate, _
+                                    LookIn:=xlFormulas, _
+                                    LookAt:=xlWhole, _
+                                    SearchOrder:=xlByColumns, _
+                                    SearchDirection:=xlNext)
                                 
-                                ' Проверяем корректность дат (конец не раньше начала)
-                                If endDate >= startDate Then
-                                    periodCount = periodCount + 1
-                                    vacationCount = vacationCount + 1
+                                If Not foundDate Is Nothing Then
+                                    dateCol = foundDate.Column
                                     
-                                    ' Отмечаем все дни отпуска на графике
-                                    currentDate = startDate
-                                    Do While currentDate <= endDate
-                                        ' Ищем столбец с этой датой на служебном листе
-                                        Set foundDate = wsService.Rows(1).Find( _
-                                            What:=currentDate, _
-                                            LookIn:=xlFormulas, _
-                                            LookAt:=xlWhole, _
-                                            SearchOrder:=xlByColumns, _
-                                            SearchDirection:=xlNext)
-                                        
-                                        If Not foundDate Is Nothing Then
-                                            dateCol = foundDate.Column
-                                            
-                                            ' Заполняем ячейку на графике (ЦВЕТ НАКЛАДЫВАЕТСЯ ПОВЕРХ цвета месяца)
-                                            With wsSchedule.Cells(scheduleRow, dateCol)
-                                                .Value = "О"  ' Буква О - отпуск
-                                                .Interior.Color = VACATION_COLOR  ' Светло-зеленый
-                                                .Font.Bold = True
-                                                .Font.Name = "Arial"
-                                                .Font.Size = 9
-                                                .HorizontalAlignment = xlCenter
-                                                .VerticalAlignment = xlCenter
-                                            End With
-                                        End If
-                                        
-                                        currentDate = currentDate + 1
-                                    Loop
+                                    ' Заполняем ячейку на графике (ЦВЕТ НАКЛАДЫВАЕТСЯ ПОВЕРХ цвета месяца)
+                                    With wsSchedule.Cells(scheduleRow, dateCol)
+                                        .Value = "О"  ' Буква О - отпуск
+                                        .Interior.Color = VACATION_COLOR  ' Светло-зеленый
+                                        .Font.Bold = True
+                                        .Font.Name = "Arial"
+                                        .Font.Size = 9
+                                        .HorizontalAlignment = xlCenter
+                                        .VerticalAlignment = xlCenter
+                                    End With
                                 End If
-                            End If
+                                
+                                currentDate = currentDate + 1
+                            Loop
                         End If
                     End If
                 End If
@@ -749,6 +958,7 @@ Private Sub ОчиститьГрафикСФорматированием(wsSched
                     With wsSchedule.Cells(i, j)
                         .Value = ""  ' Очищаем только значение
                         .Font.Bold = False
+                        .Interior.Pattern = xlNone  ' Убираем цвет отпуска
                     End With
                 Next j
             Next i
@@ -787,7 +997,7 @@ Private Sub ВосстановитьЦветаМесяцев(wsSchedule As Works
             monthColor = COLOR_MONTH_2  ' Четные месяцы: белый
         End If
         
-        ' Применяем цвет ко всем дням месяца в указанной строке
+        ' Применяем цвет ко всем дням месяца в указанной строки
         For j = 1 To daysInMonth
             With wsSchedule.Cells(rowNum, col)
                 .Interior.Color = monthColor
@@ -798,42 +1008,53 @@ Private Sub ВосстановитьЦветаМесяцев(wsSchedule As Works
 End Sub
 
 Sub ТестовыеДанные()
-    ' Процедура для заполнения тестовых данных
+    ' Процедура для заполнения тестовых данных (исправлена для нового формата)
     
     Dim ws As Worksheet
     Dim i As Long
+    Dim blockStart As Long
     
     Set ws = ThisWorkbook.Worksheets("СОТРУДНИКИ")
     
-    ' Очищаем старые данные (кроме заголовков)
-    ws.Range("A2:V21").ClearContents
-    
-    ' Восстанавливаем номера строк
-    For i = 1 To 20
-        ws.Cells(i + 1, 1).Value = i
+    ' Очищаем старые данные (сохраняем заголовки и форматирование)
+    For i = 0 To MAX_EMPLOYEES - 1
+        blockStart = i * BLOCK_COLS + 1
+        
+        ' Очищаем данные сотрудника (сохраняем формулы)
+        ws.Cells(3, blockStart).ClearContents              ' ФИО
+        ws.Range(ws.Cells(4, blockStart + 2), ws.Cells(13, blockStart + 3)).ClearContents  ' Даты отпусков
     Next i
     
-    ' Заполняем тестовые данные
-    ws.Cells(2, 2).Value = "Иванов И.И."
-    ws.Cells(2, 3).Value = DateSerial(2026, 6, 1)
-    ws.Cells(2, 4).Value = DateSerial(2026, 6, 14)
+    ' Заполняем тестовые данные для первых 3 сотрудников
     
-    ws.Cells(3, 2).Value = "Петров П.П."
-    ws.Cells(3, 3).Value = DateSerial(2026, 7, 15)
-    ws.Cells(3, 4).Value = DateSerial(2026, 7, 28)
+    ' Сотрудник 1 (блок A-D)
+    ws.Cells(3, 1).Value = "Иванов И.И."
+    ws.Cells(4, 3).Value = DateSerial(2026, 1, 10)   ' Начало отпуска 1
+    ws.Cells(4, 4).Value = DateSerial(2026, 1, 20)   ' Конец отпуска 1 (11 дней)
+    ws.Cells(5, 3).Value = DateSerial(2026, 3, 20)   ' Начало отпуска 2
+    ws.Cells(5, 4).Value = DateSerial(2026, 3, 25)   ' Конец отпуска 2 (6 дней)
+    ws.Cells(6, 3).Value = DateSerial(2026, 6, 15)   ' Начало отпуска 3
+    ws.Cells(6, 4).Value = DateSerial(2026, 6, 20)   ' Конец отпуска 3 (6 дней)
     
-    ws.Cells(4, 2).Value = "Сидоров С.С."
-    ws.Cells(4, 3).Value = DateSerial(2026, 8, 1)
-    ws.Cells(4, 4).Value = DateSerial(2026, 8, 14)
+    ' Сотрудник 2 (блок E-H)
+    ws.Cells(3, 5).Value = "Петров П.П."
+    ws.Cells(4, 7).Value = DateSerial(2026, 7, 15)   ' Начало отпуска
+    ws.Cells(4, 8).Value = DateSerial(2026, 7, 28)   ' Конец отпуска (14 дней)
+    
+    ' Сотрудник 3 (блок I-L)
+    ws.Cells(3, 9).Value = "Сидоров С.С."
+    ws.Cells(4, 11).Value = DateSerial(2026, 8, 1)   ' Начало отпуска
+    ws.Cells(4, 12).Value = DateSerial(2026, 8, 14)   ' Конец отпуска (14 дней)
     
     ' Форматируем даты
-    ws.Range("C2:V21").NumberFormat = "DD.MM.YYYY"
-    
-    ' Автоподбор ширины столбцов
-    ws.Columns("A:V").AutoFit
+    For i = 0 To MAX_EMPLOYEES - 1
+        blockStart = i * BLOCK_COLS + 1
+        ws.Range(ws.Cells(4, blockStart + 2), ws.Cells(13, blockStart + 3)).NumberFormat = "DD.MM.YYYY"
+    Next i
     
     MsgBox "Тестовые данные успешно добавлены!" & vbCrLf & _
-           "Запустите макрос 'ОбновитьГрафик' для построения графика.", _
+           "Запустите макрос 'ОбновитьГрафик' для построения графика." & vbCrLf & _
+           "Примечание: данные добавлены для первых 3 сотрудников.", _
            vbInformation, "Тестовые данные"
 End Sub
 '''
@@ -880,14 +1101,24 @@ def main():
         print("✓ ФАЙЛЫ УСПЕШНО СОЗДАНЫ")
         print(f"  • Excel файл: {excel_file}")
         print(f"  • Файл макроса: {macro_file}")
-        print("\nВАЖНОЕ ИСПРАВЛЕНИЕ В VBA МАКРОСЕ:")
-        print("  • Теперь при обновлении графика сохраняется чередование цветов месяцев")
-        print("  • Цвета месяцев восстановлены в процедуре ВосстановитьЦветаМесяцев")
-        print("  • Цвет отпуска (светло-зеленый) накладывается ПОВЕРХ цвета месяца")
-        print("  • После очистки данных автоматически восстанавливается фон месяцев")
-        print("\nЧередование цветов месяцев:")
-        print("  • Нечетные месяцы (Янв, Мар, Май, Июл, Сен, Ноя): светло-серый (F8F8F8)")
-        print("  • Четные месяцы (Фев, Апр, Июн, Авг, Окт, Дек): белый (FFFFFF)")
+        print("\nВАЖНЫЕ ИЗМЕНЕНИЯ:")
+        print("  1. ЛИСТ 'СОТРУДНИКИ' - новый формат:")
+        print("     • Каждый сотрудник имеет отдельный блок из 4 колонок")
+        print("     • Блоки расположены по горизонтали")
+        print("     • Структура блока: ФИО | дни всего | Дата начала | Дата окончания")
+        print("     • До 10 периодов отпуска на сотрудника")
+        print("     • Количество дней рассчитывается автоматически формулой")
+        print("")
+        print("  2. ЛИСТ 'ГРАФИК' - исправленный формат:")
+        print("     • В столбце '№' отображаются номера 1-20")
+        print("     • В столбце 'ФИО СОТРУДНИКА' будут отображаться ФИО из листа СОТРУДНИКИ")
+        print("     • НЕ отображается количество дней отпуска")
+        print("")
+        print("  3. VBA МАКРОС - полностью переработан:")
+        print("     • Читает данные из нового формата листа СОТРУДНИКИ")
+        print("     • Правильно определяет блоки сотрудников (по 4 колонки)")
+        print("     • Сохраняет чередование цветов месяцев")
+        print("     • Цвет отпуска накладывается поверх цвета месяца")
         print("=" * 70)
     else:
         print("✗ ОШИБКА! Не удалось создать файлы.")
