@@ -23,11 +23,9 @@
 4. Лист "ЛЕГЕНДА" и "ИНСТРУКЦИЯ" - пояснительные листы
 5. VBA макрос в отдельном файле .txt для автоматического обновления графика
 
-ИСПРАВЛЕННЫЕ ОШИБКИ:
-- Заголовки календаря (строки 1-3) НЕ совпадают с данными сотрудников
-- Данные сотрудников начинаются с строки 5 (строка 4 - только заголовки столбцов)
-- VBA макрос корректно рассчитывает строки: scheduleRow = employeeCount + 4
-- Очистка графика начинается со строки 5
+ОБНОВЛЕНИЯ:
+- Добавлен лист "ПРАЗДНИКИ" со списком нерабочих дней 2026 года
+- Формулы для подсчета дней отпуска исключают праздничные дни
 - Производственный календарь 2026 года исправлен согласно официальным данным
 
 ВАЖНО: При переносе задачи в новый чат этот промпт должен сохраняться в начале файла
@@ -142,6 +140,10 @@ class ProductionCalendar:
             if day.date == date:
                 return day
         return None
+    
+    def get_all_holidays(self):
+        """Получить список всех праздничных дней (для листа ПРАЗДНИКИ)"""
+        return [day.date for day in self.days if day.day_type == 'праздник']
 
 class VacationScheduleGenerator:
     def __init__(self, company_name="ООО РОГА И КОПЫТА"):
@@ -165,16 +167,19 @@ class VacationScheduleGenerator:
         ws_employees = wb.create_sheet("СОТРУДНИКИ", 0)
         ws_schedule = wb.create_sheet("ГРАФИК", 1)
         ws_dates = wb.create_sheet("ДАТЫ", 2)  # Служебный лист
-        ws_legend = wb.create_sheet("ЛЕГЕНДА", 3)
-        ws_instruction = wb.create_sheet("ИНСТРУКЦИЯ", 4)
+        ws_holidays = wb.create_sheet("ПРАЗДНИКИ", 3)  # Новый лист с праздниками
+        ws_legend = wb.create_sheet("ЛЕГЕНДА", 4)
+        ws_instruction = wb.create_sheet("ИНСТРУКЦИЯ", 5)
         
-        # Скрываем служебный лист
+        # Скрываем служебные листы
         ws_dates.sheet_state = 'hidden'
+        ws_holidays.sheet_state = 'hidden'
         
         # Заполняем листы
         self._create_employees_sheet(ws_employees)
         self._create_schedule_sheet(ws_schedule)
         self._create_dates_sheet(ws_dates)
+        self._create_holidays_sheet(ws_holidays)  # Новый метод
         self._create_legend_sheet(ws_legend)
         self._create_instruction_sheet(ws_instruction)
         
@@ -191,7 +196,7 @@ class VacationScheduleGenerator:
             return None
     
     def _create_employees_sheet(self, ws):
-        """Создание листа СОТРУДНИКИ с новым форматом (блоки сотрудников по горизонтали)"""
+        """Создание листа СОТРУДНИКИ с интеллектуальным подсчетом дней"""
         print("  Создание листа 'СОТРУДНИКИ'...")
         
         # Скрываем сетку для лучшего восприятия
@@ -199,7 +204,7 @@ class VacationScheduleGenerator:
         
         # Ширина столбцов для блоков
         date_width = 12
-        days_width = 8
+        days_width = 10  # Немного шире для формул
         name_width = 25
         
         # Настройки шрифтов
@@ -264,7 +269,7 @@ class VacationScheduleGenerator:
                 bottom=Side(style='thin', color="000000")
             )
             
-            # Ячейка "дни всего" (пока пустая)
+            # Ячейка "дни всего" (пока пустая - будет формула)
             days_cell = ws.cell(row=3, column=start_col+1, value="")
             days_cell.font = total_font
             days_cell.fill = days_fill
@@ -316,7 +321,7 @@ class VacationScheduleGenerator:
                     bottom=Side(style='thin', color="000000")
                 )
                 
-                # Количество дней в периоде (будет рассчитываться формулой)
+                # Количество дней в периоде (интеллектуальная формула)
                 days_period_cell = ws.cell(row=row, column=start_col+1, value="")
                 days_period_cell.font = data_font
                 days_period_cell.alignment = Alignment(horizontal="center", vertical="center")
@@ -363,16 +368,17 @@ class VacationScheduleGenerator:
                 separator_col = start_col + BLOCK_COLS
                 ws.column_dimensions[get_column_letter(separator_col)].width = 2
         
-        # Добавляем формулу для расчета дней в каждом периоде
-        self._add_formulas_for_days(ws)
+        # Добавляем ИНТЕЛЛЕКТУАЛЬНЫЕ формулы для расчета дней с учетом праздников
+        self._add_intelligent_formulas_for_days(ws)
         
         # Добавляем пример данных для первых трех сотрудников
         self._add_example_data(ws)
         
         print(f"  ✓ Лист 'СОТРУДНИКИ' создан с {self.max_employees} блоками сотрудников")
+        print("  ✓ Добавлены интеллектуальные формулы (исключают праздничные дни)")
     
-    def _add_formulas_for_days(self, ws):
-        """Добавляем формулы Excel для расчета количества дней отпуска"""
+    def _add_intelligent_formulas_for_days(self, ws):
+        """Добавляем интеллектуальные формулы Excel для расчета дней отпуска (исключая праздники)"""
         # Для каждого сотрудника (20 сотрудников)
         for emp_idx in range(self.max_employees):
             start_col = emp_idx * 4 + 1  # Каждый блок занимает 4 колонки
@@ -381,14 +387,24 @@ class VacationScheduleGenerator:
             for period_idx in range(self.vacation_pairs):
                 row = 4 + period_idx
                 
-                # Формула для расчета дней в периоде: =ЕСЛИ(И(C5<>"";D5<>"");D5-C5+1;"")
-                # Где C5 - дата начала, D5 - дата окончания
+                # Буквы столбцов для текущего блока
                 start_col_letter = get_column_letter(start_col + 2)  # Колонка даты начала
                 end_col_letter = get_column_letter(start_col + 3)    # Колонка даты окончания
                 
                 # Ячейка для количества дней в периоде (вторая колонка блока)
                 days_cell = ws.cell(row=row, column=start_col+1)
-                formula = f'=IF(AND({start_col_letter}{row}<>"",{end_col_letter}{row}<>""),{end_col_letter}{row}-{start_col_letter}{row}+1,"")'
+                
+                # ИНТЕЛЛЕКТУАЛЬНАЯ ФОРМУЛА:
+                # =ЕСЛИ(И(дата_начала<>""; дата_конца<>""); 
+                #      (дата_конца - дата_начала + 1) - СЧЁТЕСЛИ(ПРАЗДНИКИ!$A:$A; ">="&дата_начала; ПРАЗДНИКИ!$A:$A; "<="&дата_конца); 
+                #      "")
+                formula = (
+                    f'=IF(AND({start_col_letter}{row}<>"",{end_col_letter}{row}<>""),'
+                    f'({end_col_letter}{row}-{start_col_letter}{row}+1)-'
+                    f'COUNTIFS(ПРАЗДНИКИ!$A:$A,">="&{start_col_letter}{row},ПРАЗДНИКИ!$A:$A,"<="&{end_col_letter}{row}),'
+                    f'"")'
+                )
+                
                 days_cell.value = formula
                 days_cell.number_format = '0'  # Целое число
         
@@ -408,31 +424,41 @@ class VacationScheduleGenerator:
             total_formula = f'=SUM({":".join(period_refs)})'
             total_cell = ws.cell(row=total_row, column=total_col)
             total_cell.value = total_formula
+            total_cell.number_format = '0'
     
     def _add_example_data(self, ws):
         """Добавляем пример данных для первых трех сотрудников"""
         example_data = [
-            # Сотрудник 1
+            # Сотрудник 1 - отпуск захватывает праздничные дни
             {
                 'name': 'Иванов И.И.',
                 'periods': [
+                    # Пример 1: 10-20 января (11 календарных дней, но 1-8 и 9 января - праздники)
+                    # Будет посчитано: 11 дней - 0 праздников в периоде = 11 дней
                     (datetime.date(2026, 1, 10), datetime.date(2026, 1, 20)),  # 11 дней
+                    
+                    # Пример 2: 20-25 марта (6 календарных дней, праздников нет)
                     (datetime.date(2026, 3, 20), datetime.date(2026, 3, 25)),  # 6 дней
-                    (datetime.date(2026, 6, 15), datetime.date(2026, 6, 20)),  # 6 дней
+                    
+                    # Пример 3: 10-15 июня (6 календарных дней, но 12 июня - праздник)
+                    # Будет посчитано: 6 дней - 1 праздник = 5 дней отпуска
+                    (datetime.date(2026, 6, 10), datetime.date(2026, 6, 15)),  # 6 дней, но 12 июня праздник
                 ]
             },
             # Сотрудник 2
             {
                 'name': 'Петров П.П.',
                 'periods': [
-                    (datetime.date(2026, 7, 15), datetime.date(2026, 7, 28)),  # 14 дней
+                    # Пример: 1-15 мая (15 дней, но 1, 9, 11 мая - праздники)
+                    # Будет посчитано: 15 дней - 3 праздника = 12 дней отпуска
+                    (datetime.date(2026, 5, 1), datetime.date(2026, 5, 15)),  # Захватывает 1, 9 мая
                 ]
             },
             # Сотрудник 3
             {
                 'name': 'Сидоров С.С.',
                 'periods': [
-                    (datetime.date(2026, 8, 1), datetime.date(2026, 8, 14)),  # 14 дней
+                    (datetime.date(2026, 8, 1), datetime.date(2026, 8, 14)),  # 14 дней, праздников нет
                 ]
             }
         ]
@@ -454,6 +480,58 @@ class VacationScheduleGenerator:
                 row = 4 + period_idx
                 ws.cell(row=row, column=start_col+2, value=start_date)  # Дата начала
                 ws.cell(row=row, column=start_col+3, value=end_date)    # Дата окончания
+    
+    def _create_holidays_sheet(self, ws):
+        """Создание листа ПРАЗДНИКИ со списком нерабочих дней"""
+        print("  Создание листа 'ПРАЗДНИКИ'...")
+        
+        # Заголовок
+        ws.column_dimensions['A'].width = 15
+        ws.cell(row=1, column=1, value="ПРАЗДНИЧНЫЕ ДНИ 2026").font = Font(bold=True, size=12, color="1F4E78")
+        ws.cell(row=2, column=1, value="Дата").font = Font(bold=True)
+        ws.cell(row=2, column=2, value="Описание").font = Font(bold=True)
+        
+        # Получаем все праздничные дни из календаря
+        holidays = self.calendar.get_all_holidays()
+        holidays.sort()  # Сортируем по дате
+        
+        # Заполняем таблицу праздников
+        descriptions = {
+            datetime.date(2026, 1, 1): "Новый год",
+            datetime.date(2026, 1, 2): "Новогодние каникулы",
+            datetime.date(2026, 1, 3): "Новогодние каникулы",
+            datetime.date(2026, 1, 4): "Новогодние каникулы",
+            datetime.date(2026, 1, 5): "Новогодние каникулы",
+            datetime.date(2026, 1, 6): "Новогодние каникулы",
+            datetime.date(2026, 1, 7): "Рождество Христово",
+            datetime.date(2026, 1, 8): "Новогодние каникулы",
+            datetime.date(2026, 1, 9): "Перенос с 3 января",
+            datetime.date(2026, 2, 23): "День защитника Отечества",
+            datetime.date(2026, 3, 8): "Международный женский день",
+            datetime.date(2026, 3, 9): "Перенос с 8 марта",
+            datetime.date(2026, 5, 1): "Праздник Весны и Труда",
+            datetime.date(2026, 5, 9): "День Победы",
+            datetime.date(2026, 5, 11): "Перенос с 9 мая",
+            datetime.date(2026, 6, 12): "День России",
+            datetime.date(2026, 11, 4): "День народного единства",
+            datetime.date(2026, 12, 31): "Перенос с 4 января",
+        }
+        
+        for i, holiday in enumerate(holidays, start=1):
+            row = i + 2  # Начинаем с строки 3
+            ws.cell(row=row, column=1, value=holiday)
+            ws.cell(row=row, column=1).number_format = 'DD.MM.YYYY'
+            
+            # Добавляем описание праздника
+            desc = descriptions.get(holiday, "Праздничный день")
+            ws.cell(row=row, column=2, value=desc)
+            
+            # Заливка для праздников
+            holiday_fill = PatternFill(start_color="FF9999", end_color="FF9999", fill_type="solid")
+            ws.cell(row=row, column=1).fill = holiday_fill
+            ws.cell(row=row, column=2).fill = holiday_fill
+        
+        print(f"  ✓ Лист 'ПРАЗДНИКИ' создан ({len(holidays)} праздничных дней)")
     
     def _create_schedule_sheet(self, ws):
         """Создание листа ГРАФИК с исправленным производственным календарем"""
@@ -705,6 +783,12 @@ class VacationScheduleGenerator:
         content = [
             ("ИНСТРУКЦИЯ ПО РАБОТЕ С ГРАФИКОМ ОТПУСКОВ", 16, True, True),
             ("", 1, False, False),
+            ("НОВОЕ: ИНТЕЛЛЕКТУАЛЬНЫЙ ПОДСЧЕТ ДНЕЙ", 14, True, False),
+            ("• Количество дней отпуска рассчитывается автоматически", 11, False, False),
+            ("• Праздничные дни исключаются из расчета", 11, False, False),
+            ("• Формула: (дата_конца - дата_начала + 1) - праздники_в_периоде", 11, False, False),
+            ("• Список праздников на листе 'ПРАЗДНИКИ' (скрыт)", 11, False, False),
+            ("", 1, False, False),
             ("ШАГ 1: УСТАНОВКА МАКРОСА", 14, True, False),
             ("1. Откройте файл в Microsoft Excel", 11, False, False),
             ("2. Нажмите Alt+F11 для открытия редактора VBA", 11, False, False),
@@ -717,20 +801,17 @@ class VacationScheduleGenerator:
             ("2. Заполните столбец 'ФИО' в каждом блоке сотрудника", 11, False, False),
             ("3. Заполните даты отпусков в столбцах 'Дата начала' и 'Дата окончания'", 11, False, False),
             ("4. Формат дат: ДД.ММ.ГГГГ (например: 15.06.2026)", 11, False, False),
-            ("5. Количество дней рассчитывается автоматически", 11, False, False),
+            ("5. Количество дней рассчитывается АВТОМАТИЧЕСКИ с учетом праздников", 11, False, False),
             ("", 1, False, False),
             ("ШАГ 3: ЗАПУСК ГРАФИКА", 14, True, False),
             ("1. Нажмите Alt+F8 для открытия диалога макросов", 11, False, False),
             ("2. Выберите макрос 'ОбновитьГрафик' → 'Выполнить'", 11, False, False),
             ("3. Перейдите на лист 'ГРАФИК' для просмотра", 11, False, False),
             ("", 1, False, False),
-            ("ВАЖНОЕ ИЗМЕНЕНИЕ В ФОРМАТЕ!", 14, True, False),
-            ("• Теперь каждый сотрудник имеет отдельный блок из 4 колонок", 11, False, False),
-            ("• Структура блока: ФИО | дни всего | Дата начала | Дата окончания", 11, False, False),
-            ("• До 10 периодов отпуска на сотрудника", 11, False, False),
-            ("• Количество дней рассчитывается автоматически формулой", 11, False, False),
-            ("• Формула: =ЕСЛИ(И(дата_начала<>"";дата_конца<>"");дата_конца-дата_начала+1;"")", 11, False, False),
-            ("• Итоговые дни: =СУММ(диапазон_дней_периодов)", 11, False, False),
+            ("ПРИМЕР:", 14, True, False),
+            ("• Отпуск с 10.06.2026 по 15.06.2026 = 6 календарных дней", 11, False, False),
+            ("• Но 12.06.2026 - праздник (День России)", 11, False, False),
+            ("• ИТОГО: 6 - 1 = 5 дней отпуска", 11, False, False),
         ]
         
         for i, (text, size, bold, center) in enumerate(content, 1):
@@ -764,10 +845,12 @@ Private Const VACATION_COLOR As Long = &HC6EFCE    ' Светло-зеленый
 Sub ОбновитьГрафик()
     ' Макрос для обновления графика отпусков
     ' Считывает данные с листа СОТРУДНИКИ (новый формат) и заполняет лист ГРАФИК
+    ' ВАЖНО: Не отмечает праздничные дни как дни отпуска!
     
     Dim wsEmployees As Worksheet
     Dim wsSchedule As Worksheet
     Dim wsService As Worksheet
+    Dim wsHolidays As Worksheet
     
     Dim employeeCount As Long
     Dim vacationCount As Long
@@ -800,6 +883,7 @@ Sub ОбновитьГрафик()
     Set wsEmployees = ThisWorkbook.Worksheets("СОТРУДНИКИ")
     Set wsSchedule = ThisWorkbook.Worksheets("ГРАФИК")
     Set wsService = ThisWorkbook.Worksheets("ДАТЫ")
+    Set wsHolidays = ThisWorkbook.Worksheets("ПРАЗДНИКИ")
     
     ' Очищаем предыдущий график (НО сохраняем цвет фона)
     Call ОчиститьГрафикСФорматированием(wsSchedule)
@@ -846,30 +930,48 @@ Sub ОбновитьГрафик()
                         If endDate >= startDate Then
                             vacationCount = vacationCount + 1
                             
-                            ' Отмечаем все дни отпуска на графике
+                            ' Отмечаем все дни отпуска на графике (кроме праздников!)
                             currentDate = startDate
                             Do While currentDate <= endDate
-                                ' Ищем столбец с этой датой на служебном листе
-                                Set foundDate = wsService.Rows(1).Find( _
+                                ' ПРОВЕРЯЕМ: является ли текущий день праздником?
+                                Dim isHoliday As Boolean
+                                isHoliday = False
+                                
+                                ' Ищем дату в списке праздников
+                                Dim holidayCell As Range
+                                Set holidayCell = wsHolidays.Columns(1).Find( _
                                     What:=currentDate, _
                                     LookIn:=xlFormulas, _
-                                    LookAt:=xlWhole, _
-                                    SearchOrder:=xlByColumns, _
-                                    SearchDirection:=xlNext)
+                                    LookAt:=xlWhole)
                                 
-                                If Not foundDate Is Nothing Then
-                                    dateCol = foundDate.Column
+                                If Not holidayCell Is Nothing Then
+                                    isHoliday = True
+                                End If
+                                
+                                ' Если день НЕ праздник - отмечаем его как день отпуска
+                                If Not isHoliday Then
+                                    ' Ищем столбец с этой датой на служебном листе
+                                    Set foundDate = wsService.Rows(1).Find( _
+                                        What:=currentDate, _
+                                        LookIn:=xlFormulas, _
+                                        LookAt:=xlWhole, _
+                                        SearchOrder:=xlByColumns, _
+                                        SearchDirection:=xlNext)
                                     
-                                    ' Заполняем ячейку на графике (ЦВЕТ НАКЛАДЫВАЕТСЯ ПОВЕРХ цвета месяца)
-                                    With wsSchedule.Cells(scheduleRow, dateCol)
-                                        .Value = "О"  ' Буква О - отпуск
-                                        .Interior.Color = VACATION_COLOR  ' Светло-зеленый
-                                        .Font.Bold = True
-                                        .Font.Name = "Arial"
-                                        .Font.Size = 9
-                                        .HorizontalAlignment = xlCenter
-                                        .VerticalAlignment = xlCenter
-                                    End With
+                                    If Not foundDate Is Nothing Then
+                                        dateCol = foundDate.Column
+                                        
+                                        ' Заполняем ячейку на графике (ЦВЕТ НАКЛАДЫВАЕТСЯ ПОВЕРХ цвета месяца)
+                                        With wsSchedule.Cells(scheduleRow, dateCol)
+                                            .Value = "О"  ' Буква О - отпуск
+                                            .Interior.Color = VACATION_COLOR  ' Светло-зеленый
+                                            .Font.Bold = True
+                                            .Font.Name = "Arial"
+                                            .Font.Size = 9
+                                            .HorizontalAlignment = xlCenter
+                                            .VerticalAlignment = xlCenter
+                                        End With
+                                    End If
                                 End If
                                 
                                 currentDate = currentDate + 1
@@ -893,6 +995,7 @@ Sub ОбновитьГрафик()
     MsgBox "График отпусков успешно обновлен!" & vbCrLf & _
            "Обработано сотрудников: " & employeeCount & vbCrLf & _
            "Найдено периодов отпуска: " & vacationCount & vbCrLf & _
+           "Праздничные дни НЕ отмечены как дни отпуска." & vbCrLf & _
            "Чередование цветов месяцев сохранено.", _
            vbInformation + vbOKOnly, _
            "Обновление графика отпусков"
@@ -1016,22 +1119,22 @@ Sub ТестовыеДанные()
     ' Заполняем тестовые данные для первых 3 сотрудников
     ' Сотрудник 1 (блок A-D)
     ws.Cells(3, 1).Value = "Иванов И.И."
-    ws.Cells(4, 3).Value = DateSerial(2026, 1, 10)   ' Начало отпуска 1
-    ws.Cells(4, 4).Value = DateSerial(2026, 1, 20)   ' Конец отпуска 1 (11 дней)
+    ws.Cells(4, 3).Value = DateSerial(2026, 1, 10)   ' Начало отпуска 1 (после праздников)
+    ws.Cells(4, 4).Value = DateSerial(2026, 1, 20)   ' Конец отпуска 1 (11 дней, 0 праздников)
     ws.Cells(5, 3).Value = DateSerial(2026, 3, 20)   ' Начало отпуска 2
-    ws.Cells(5, 4).Value = DateSerial(2026, 3, 25)   ' Конец отпуска 2 (6 дней)
-    ws.Cells(6, 3).Value = DateSerial(2026, 6, 15)   ' Начало отпуска 3
-    ws.Cells(6, 4).Value = DateSerial(2026, 6, 20)   ' Конец отпуска 3 (6 дней)
+    ws.Cells(5, 4).Value = DateSerial(2026, 3, 25)   ' Конец отпуска 2 (6 дней, 0 праздников)
+    ws.Cells(6, 3).Value = DateSerial(2026, 6, 10)   ' Начало отпуска 3 (включает 12 июня)
+    ws.Cells(6, 4).Value = DateSerial(2026, 6, 15)   ' Конец отпуска 3 (6 дней, 1 праздник = 5 дней отпуска)
     
     ' Сотрудник 2 (блок E-H)
     ws.Cells(3, 5).Value = "Петров П.П."
-    ws.Cells(4, 7).Value = DateSerial(2026, 7, 15)   ' Начало отпуска
-    ws.Cells(4, 8).Value = DateSerial(2026, 7, 28)   ' Конец отпуска (14 дней)
+    ws.Cells(4, 7).Value = DateSerial(2026, 5, 1)    ' Начало отпуска (1 мая - праздник)
+    ws.Cells(4, 8).Value = DateSerial(2026, 5, 15)   ' Конец отпуска (15 дней, 3 праздника = 12 дней отпуска)
     
     ' Сотрудник 3 (блок I-L)
     ws.Cells(3, 9).Value = "Сидоров С.С."
     ws.Cells(4, 11).Value = DateSerial(2026, 8, 1)   ' Начало отпуска
-    ws.Cells(4, 12).Value = DateSerial(2026, 8, 14)   ' Конец отпуска (14 дней)
+    ws.Cells(4, 12).Value = DateSerial(2026, 8, 14)  ' Конец отпуска (14 дней, 0 праздников)
     
     ' Форматируем даты
     For i = 0 To MAX_EMPLOYEES - 1
@@ -1039,10 +1142,16 @@ Sub ТестовыеДанные()
         ws.Range(ws.Cells(4, blockStart + 2), ws.Cells(13, blockStart + 3)).NumberFormat = "DD.MM.YYYY"
     Next i
     
+    ' Пересчитываем формулы
+    ws.Calculate
+    
     MsgBox "Тестовые данные успешно добавлены!" & vbCrLf & _
-           "Запустите макрос 'ОбновитьГрафик' для построения графика." & vbCrLf & _
-           "Примечание: данные добавлены для первых 3 сотрудников.", _
-           vbInformation, "Тестовые данные"
+           "Примеры для проверки интеллектуального подсчета:" & vbCrLf & _
+           "1. Иванов: 10-20.01.2026 = 11 дней (0 праздников)" & vbCrLf & _
+           "2. Иванов: 10-15.06.2026 = 5 дней (12 июня - праздник)" & vbCrLf & _
+           "3. Петров: 01-15.05.2026 = 12 дней (1, 9, 11 мая - праздники)" & vbCrLf & _
+           "Запустите макрос 'ОбновитьГрафик' для построения графика.", _
+           vbInformation, "Тестовые данные с праздниками"
 End Sub
 '''
         
@@ -1088,16 +1197,25 @@ def main():
         print("✓ ФАЙЛЫ УСПЕШНО СОЗДАНЫ")
         print(f"  • Excel файл: {excel_file}")
         print(f"  • Файл макроса: {macro_file}")
-        print("\nВАЖНЫЕ ИСПРАВЛЕНИЯ В ПРОИЗВОДСТВЕННОМ КАЛЕНДАРЕ:")
-        print("  1. В 2026 году НЕТ рабочих суббот (символ '◉' не используется)")
-        print("  2. 27 февраля - обычная пятница (рабочий день)")
-        print("  3. 2 мая - обычная суббота (выходной день)")
-        print("  4. 31 декабря - дополнительный выходной (перенос с 4 января)")
-        print("  5. Исправлены все предпраздничные дни")
-        print("\nФормат листа 'СОТРУДНИКИ':")
-        print("  • Каждый сотрудник имеет отдельный блок из 4 колонок")
-        print("  • Блоки расположены по горизонтали")
-        print("  • Структура блока: ФИО | дни всего | Дата начала | Дата окончания")
+        print("\nОСНОВНЫЕ ФУНКЦИИ:")
+        print("  1. ИНТЕЛЛЕКТУАЛЬНЫЙ ПОДСЧЕТ ДНЕЙ ОТПУСКА:")
+        print("     • Праздничные дни автоматически исключаются из расчета")
+        print("     • Формулы на листе 'СОТРУДНИКИ' используют СЧЁТЕСЛИ")
+        print("     • Список праздников на скрытом листе 'ПРАЗДНИКИ'")
+        print("")
+        print("  2. ПРАВИЛЬНЫЙ ПРОИЗВОДСТВЕННЫЙ КАЛЕНДАРЬ:")
+        print("     • В 2026 году НЕТ рабочих суббот")
+        print("     • 31 декабря - дополнительный выходной")
+        print("     • Исправлены все предпраздничные дни")
+        print("")
+        print("  3. УМНЫЙ VBA МАКРОС:")
+        print("     • Не отмечает праздничные дни как дни отпуска на графике")
+        print("     • Сохраняет чередование цветов месяцев")
+        print("     • Работает с новым форматом листа 'СОТРУДНИКИ'")
+        print("")
+        print("ПРИМЕРЫ ДЛЯ ПРОВЕРКИ:")
+        print("  • Иванов: 10-15.06.2026 = 5 дней (12 июня исключен)")
+        print("  • Петров: 01-15.05.2026 = 12 дней (1, 9, 11 мая исключены)")
         print("=" * 70)
     else:
         print("✗ ОШИБКА! Не удалось создать файлы.")
