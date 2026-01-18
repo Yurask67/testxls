@@ -25,10 +25,10 @@
 
 ИСПРАВЛЕННЫЕ ОШИБКИ:
 - Заголовки календаря (строки 1-3) НЕ совпадают с данными сотрудников
-- Данные сотрудников начинаются с строкя 5 (строка 4 - только заголовки столбцов)
+- Данные сотрудников начинаются с строки 5 (строка 4 - только заголовки столбцов)
 - VBA макрос корректно рассчитывает строки: scheduleRow = employeeCount + 4
 - Очистка графика начинается со строки 5
-- Производственный календарь 2026 года исправлен
+- Производственный календарь 2026 года исправлен согласно официальным данным
 
 ВАЖНО: При переносе задачи в новый чат этот промпт должен сохраняться в начале файла
 для понимания контекста. Текущие задачи добавляются в конец промпта отдельным блоком.
@@ -46,7 +46,7 @@ import calendar
 class WorkDay:
     def __init__(self, date, day_type, is_short=False):
         self.date = date
-        self.day_type = day_type  # 'рабочий', 'выходной', 'праздник', 'рабочая суббота'
+        self.day_type = day_type  # 'рабочий', 'выходной', 'праздник'
         self.is_short = is_short  # Сокращенный день
 
 class ProductionCalendar:
@@ -56,32 +56,32 @@ class ProductionCalendar:
         self._generate_calendar()
     
     def _generate_calendar(self):
-        """Генерация производственного календаря на 2026 год в России"""
+        """Генерация производственного календаря на 2026 год в России (ОФИЦИАЛЬНЫЙ)"""
         date = datetime.date(self.year, 1, 1)
         
-        # Официальные нерабочие праздничные дни (статья 112 ТК РФ)
+        # Официальные нерабочие праздничные дни (статья 112 ТК РФ) на 2026 год
         holidays = [
-            # Новогодние каникулы и Рождество Христово
+            # Новогодние каникулы и Рождество Христово (1-8 января)
             datetime.date(self.year, 1, 1),   # Новый год
-            datetime.date(self.year, 1, 2),   # 
-            datetime.date(self.year, 1, 3),   # 
-            datetime.date(self.year, 1, 4),   # 
-            datetime.date(self.year, 1, 5),   # 
-            datetime.date(self.year, 1, 6),   # 
+            datetime.date(self.year, 1, 2),   
+            datetime.date(self.year, 1, 3),   
+            datetime.date(self.year, 1, 4),   
+            datetime.date(self.year, 1, 5),   
+            datetime.date(self.year, 1, 6),   
             datetime.date(self.year, 1, 7),   # Рождество Христово
-            datetime.date(self.year, 1, 8),   # 
+            datetime.date(self.year, 1, 8),   
             
             # День защитника Отечества
             datetime.date(self.year, 2, 23),  # Понедельник
             
-            # Международный женский день
-            datetime.date(self.year, 3, 8),   # Воскресенье -> выходной 9 марта
+            # Международный женский день (8 марта - воскресенье)
+            datetime.date(self.year, 3, 8),   # Воскресенье
             
             # Праздник Весны и Труда
             datetime.date(self.year, 5, 1),   # Пятница
             
-            # День Победы
-            datetime.date(self.year, 5, 9),   # Суббота -> выходной 11 мая
+            # День Победы (9 мая - суббота)
+            datetime.date(self.year, 5, 9),   # Суббота
             
             # День России
             datetime.date(self.year, 6, 12),  # Пятница
@@ -90,32 +90,32 @@ class ProductionCalendar:
             datetime.date(self.year, 11, 4),  # Среда
         ]
         
-        # Дополнительные выходные дни (переносы с суббот 3 и 10 января)
+        # Дополнительные выходные дни (переносы)
+        # Суббота 3 января → пятница 9 января
+        # Воскресенье 8 марта → понедельник 9 марта
+        # Суббота 9 мая → понедельник 11 мая
+        # Воскресенье 4 января → четверг 31 декабря
         extra_holidays = [
             datetime.date(self.year, 1, 9),   # Пятница (перенос с сб 3 января)
-            datetime.date(self.year, 3, 9),   # Понедельник (перенос с сб 10 января)
+            datetime.date(self.year, 3, 9),   # Понедельник (перенос с вс 8 марта)
             datetime.date(self.year, 5, 11),  # Понедельник (перенос с сб 9 мая)
+            datetime.date(self.year, 12, 31), # Четверг (перенос с вс 4 января)
         ]
         
-        # Все праздничные дни
+        # Все праздничные дни (нерабочие)
         all_holidays = holidays + extra_holidays
         
-        # Предпраздничные дни (сокращенные на 1 час)
+        # Предпраздничные дни (сокращенные на 1 час) - рабочие дни перед праздниками
         pre_holidays = [
             datetime.date(self.year, 2, 20),  # Пятница перед 23 февраля
-            datetime.date(self.year, 3, 7),   # Суббота перед 8 марта
             datetime.date(self.year, 4, 30),  # Четверг перед 1 мая
             datetime.date(self.year, 5, 8),   # Пятница перед 9 мая
-            datetime.date(self.year, 6, 11),  # Пятница перед 12 июня
+            datetime.date(self.year, 6, 11),  # Четверг перед 12 июня
             datetime.date(self.year, 11, 3),  # Вторник перед 4 ноября
-            datetime.date(self.year, 12, 31), # Четверг перед Новым годом
         ]
         
-        # Рабочие субботы (перенесенные рабочие дни)
-        working_saturdays = [
-            datetime.date(self.year, 2, 27),  # Суббота (перенос на пн 9 марта)
-            datetime.date(self.year, 5, 2),   # Суббота (перенос на пн 4 мая)
-        ]
+        # В 2026 году НЕТ рабочих суббот (официально)
+        working_saturdays = []
         
         while date.year == self.year:
             # Определяем тип дня
@@ -125,14 +125,11 @@ class ProductionCalendar:
             # Проверяем праздники
             if date in all_holidays:
                 day_type = 'праздник'
-            # Проверяем рабочие субботы
-            elif date in working_saturdays:
-                day_type = 'рабочая суббота'
             # Проверяем обычные выходные (суббота, воскресенье)
             elif date.weekday() >= 5:  # 5=суббота, 6=воскресенье
                 day_type = 'выходной'
             
-            # Проверяем предпраздничные дни
+            # Проверяем предпраздничные дни (только если это рабочий день)
             if date in pre_holidays and day_type == 'рабочий':
                 is_short = True
             
@@ -201,7 +198,6 @@ class VacationScheduleGenerator:
         ws.sheet_view.showGridLines = False
         
         # Ширина столбцов для блоков
-        block_width = 4  # колонки на одного сотрудника
         date_width = 12
         days_width = 8
         name_width = 25
@@ -460,14 +456,14 @@ class VacationScheduleGenerator:
                 ws.cell(row=row, column=start_col+3, value=end_date)    # Дата окончания
     
     def _create_schedule_sheet(self, ws):
-        """Создание листа ГРАФИК с исправленным отображением сотрудников"""
+        """Создание листа ГРАФИК с исправленным производственным календарем"""
         print("  Создание листа 'ГРАФИК'...")
         
         # Настраиваем ширину
         ws.column_dimensions['A'].width = 6
         ws.column_dimensions['B'].width = 25
         
-        # Заголовки столбцов данных - КОРРЕКТИРУЕМ
+        # Заголовки столбцов данных
         ws.cell(row=4, column=1, value="№").font = Font(bold=True)
         ws.cell(row=4, column=2, value="ФИО СОТРУДНИКА").font = Font(bold=True)
         
@@ -493,7 +489,6 @@ class VacationScheduleGenerator:
             'рабочий': 'FFFFFF',      # Белый
             'выходной': 'F2F2F2',     # Серый
             'праздник': 'FF9999',     # Красный
-            'рабочая суббота': '99FF99', # Зеленый
         }
         
         # Цвета для чередования месяцев (светло-серый и белый)
@@ -521,31 +516,28 @@ class VacationScheduleGenerator:
             month_cell.font = Font(bold=True, size=11)
             month_cell.fill = month_fill  # Только заголовок месяца получает чередующийся цвет
             
-            # Заполняем числа (СТРОКА 2) и дни недели (СТРОКА 3) - БЕЗ чередующегося цвета
+            # Заполняем числа (СТРОКА 2) и дни недели (СТРОКА 3)
             for day in range(1, days_in_month + 1):
                 col = current_col + day - 1
                 date_obj = datetime.date(self.year, month, day)
                 day_info = self.calendar.get_day_info(date_obj)
                 
-                # Число месяца (СТРОКА 2) - БЕЗ чередующегося цвета месяца
+                # Число месяца (СТРОКА 2)
                 day_cell = ws.cell(row=2, column=col, value=day)
                 day_cell.alignment = Alignment(horizontal="center", vertical="center")
                 day_cell.font = Font(size=9)
                 
-                # День недели + символ (СТРОКА 3) - БЕЗ чередующегося цвета месяца
+                # День недели + символ (СТРОКА 3)
                 day_name = day_names[date_obj.weekday()]
                 
                 # Добавляем символ для особых дней согласно производственному календарю
                 symbol = ""
                 if day_info:
                     if day_info.day_type == 'праздник':
-                        symbol = " ✶"  # Праздник
+                        symbol = " ✶"  # Праздник или дополнительный выходной
                     elif day_info.is_short:
                         symbol = " ●"  # Сокращенный (предпраздничный)
-                    elif day_info.day_type == 'рабочая суббота':
-                        symbol = " ◉"  # Рабочая суббота
-                    elif day_info.day_type == 'выходной' and date_obj.weekday() < 5:
-                        symbol = " ✶"  # Дополнительный выходной (перенос)
+                    # Для обычных выходных (суббота, воскресенье) символ не добавляем
                 
                 weekday_cell = ws.cell(row=3, column=col, value=f"{day_name}{symbol}")
                 weekday_cell.alignment = Alignment(horizontal="center", vertical="center")
@@ -558,9 +550,7 @@ class VacationScheduleGenerator:
                     if day_info.day_type == 'праздник':
                         fill_color = colors['праздник']
                     elif day_info.day_type == 'выходной':
-                        fill_color = colors['выходinal']
-                    elif day_info.day_type == 'рабочая суббота':
-                        fill_color = colors['рабочая суббота']
+                        fill_color = colors['выходной']
                     # Для рабочих дней оставляем белый цвет
                 
                 day_fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
@@ -635,12 +625,12 @@ class VacationScheduleGenerator:
         print(f"  ✓ Лист 'ГРАФИК' создан ({current_col-3} дней)")
     
     def _create_dates_sheet(self, ws):
-        """Создание служебного листа с датами"""
+        """Создание служебного листа с датами - начинаем с колонки C"""
         print("  Создание служебного листа с датами...")
         
-        # Заполняем даты по горизонтали
+        # Заполняем даты по горизонтали, НАЧИНАЯ С КОЛОНКИ C (3)
         date_obj = datetime.date(self.year, 1, 1)
-        col = 1
+        col = 3  # Начинаем с колонки C, чтобы соответствовать графику
         
         while date_obj.year == self.year:
             cell = ws.cell(row=1, column=col, value=date_obj)
@@ -652,7 +642,7 @@ class VacationScheduleGenerator:
         for c in range(1, col):
             ws.column_dimensions[get_column_letter(c)].width = 0.5
         
-        print(f"  ✓ Служебный лист создан ({col-1} дней)")
+        print(f"  ✓ Служебный лист создан ({col-3} дней, начинается с колонки C)")
     
     def _create_legend_sheet(self, ws):
         """Создание листа ЛЕГЕНДА"""
@@ -676,11 +666,10 @@ class VacationScheduleGenerator:
             cell.fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
             cell.alignment = Alignment(horizontal="center", vertical="center")
         
-        # Данные легенды
+        # Данные легенды (ОБНОВЛЕНО - убрана "Рабочая суббота")
         legend_data = [
             ("✶", "Праздник/Выходной", "Нерабочий праздничный или дополнительный выходной день", "FF9999"),
             ("●", "Сокращенный", "Предпраздничный рабочий день (короче на 1 час)", "FFFF99"),
-            ("◉", "Рабочая суббота", "Перенесенный рабочий день (суббота)", "99FF99"),
             ("О", "Отпуск", "День отпуска сотрудника", "C6EFCE"),
             ("", "Выходной", "Суббота, воскресенье", "F2F2F2"),
             ("", "Рабочий", "Обычный рабочий день", "FFFFFF"),
@@ -753,7 +742,7 @@ class VacationScheduleGenerator:
         print("  ✓ Лист 'ИНСТРУКЦИЯ' создан")
     
     def create_vba_macro_file(self):
-        """Создание файла с VBA макросом для нового формата листа СОТРУДНИКИ"""
+        """Создание файла с VBA макросом"""
         print("\nСоздание файла с VBA макросом...")
         
         vba_code = '''Option Explicit
@@ -1008,8 +997,7 @@ Private Sub ВосстановитьЦветаМесяцев(wsSchedule As Works
 End Sub
 
 Sub ТестовыеДанные()
-    ' Процедура для заполнения тестовых данных (исправлена для нового формата)
-    
+    ' Процедура для заполнения тестовых данных
     Dim ws As Worksheet
     Dim i As Long
     Dim blockStart As Long
@@ -1026,7 +1014,6 @@ Sub ТестовыеДанные()
     Next i
     
     ' Заполняем тестовые данные для первых 3 сотрудников
-    
     ' Сотрудник 1 (блок A-D)
     ws.Cells(3, 1).Value = "Иванов И.И."
     ws.Cells(4, 3).Value = DateSerial(2026, 1, 10)   ' Начало отпуска 1
@@ -1101,24 +1088,16 @@ def main():
         print("✓ ФАЙЛЫ УСПЕШНО СОЗДАНЫ")
         print(f"  • Excel файл: {excel_file}")
         print(f"  • Файл макроса: {macro_file}")
-        print("\nВАЖНЫЕ ИЗМЕНЕНИЯ:")
-        print("  1. ЛИСТ 'СОТРУДНИКИ' - новый формат:")
-        print("     • Каждый сотрудник имеет отдельный блок из 4 колонок")
-        print("     • Блоки расположены по горизонтали")
-        print("     • Структура блока: ФИО | дни всего | Дата начала | Дата окончания")
-        print("     • До 10 периодов отпуска на сотрудника")
-        print("     • Количество дней рассчитывается автоматически формулой")
-        print("")
-        print("  2. ЛИСТ 'ГРАФИК' - исправленный формат:")
-        print("     • В столбце '№' отображаются номера 1-20")
-        print("     • В столбце 'ФИО СОТРУДНИКА' будут отображаться ФИО из листа СОТРУДНИКИ")
-        print("     • НЕ отображается количество дней отпуска")
-        print("")
-        print("  3. VBA МАКРОС - полностью переработан:")
-        print("     • Читает данные из нового формата листа СОТРУДНИКИ")
-        print("     • Правильно определяет блоки сотрудников (по 4 колонки)")
-        print("     • Сохраняет чередование цветов месяцев")
-        print("     • Цвет отпуска накладывается поверх цвета месяца")
+        print("\nВАЖНЫЕ ИСПРАВЛЕНИЯ В ПРОИЗВОДСТВЕННОМ КАЛЕНДАРЕ:")
+        print("  1. В 2026 году НЕТ рабочих суббот (символ '◉' не используется)")
+        print("  2. 27 февраля - обычная пятница (рабочий день)")
+        print("  3. 2 мая - обычная суббота (выходной день)")
+        print("  4. 31 декабря - дополнительный выходной (перенос с 4 января)")
+        print("  5. Исправлены все предпраздничные дни")
+        print("\nФормат листа 'СОТРУДНИКИ':")
+        print("  • Каждый сотрудник имеет отдельный блок из 4 колонок")
+        print("  • Блоки расположены по горизонтали")
+        print("  • Структура блока: ФИО | дни всего | Дата начала | Дата окончания")
         print("=" * 70)
     else:
         print("✗ ОШИБКА! Не удалось создать файлы.")
