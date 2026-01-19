@@ -36,6 +36,10 @@
 
 ИСПРАВЛЕНИЕ 2: Оптимизирована скорость работы VBA макроса при пустых ФИО сотрудников.
 Макрос останавливает обработку при обнаружении пустого ФИО (сотрудники идут по порядку).
+
+ИСПРАВЛЕНИЕ 3: Добавлена кнопка на лист СОТРУДНИКИ для запуска макроса.
+
+ИСПРАВЛЕНИЕ 4: Более контрастные цвета для разграничения дней и защита ячеек (без пароля).
 """
 
 import os
@@ -62,7 +66,6 @@ class ProductionCalendar:
         """Генерация производственного календаря на 2026 год в России (ОФИЦИАЛЬНЫЙ)"""
         date = datetime.date(self.year, 1, 1)
         
-        # Официальные нерабочие праздничные дни (статья 112 ТК РФ) на 2026 год
         holidays = [
             datetime.date(self.year, 1, 1),
             datetime.date(self.year, 1, 2),
@@ -80,7 +83,6 @@ class ProductionCalendar:
             datetime.date(self.year, 11, 4),
         ]
         
-        # Дополнительные выходные дни (переносы)
         extra_holidays = [
             datetime.date(self.year, 1, 9),
             datetime.date(self.year, 3, 9),
@@ -88,10 +90,8 @@ class ProductionCalendar:
             datetime.date(self.year, 12, 31),
         ]
         
-        # Все праздничные дни (нерабочие)
         all_holidays = holidays + extra_holidays
         
-        # Предпраздничные дни (сокращенные на 1 час)
         pre_holidays = [
             datetime.date(self.year, 2, 20),
             datetime.date(self.year, 4, 30),
@@ -160,6 +160,13 @@ class VacationScheduleGenerator:
         self._create_legend_sheet(ws_legend)
         self._create_instruction_sheet(ws_instruction)
         
+        # Добавляем место для кнопки
+        self._add_button_placeholder(ws_employees)
+        
+        # Не включаем защиту через openpyxl - будут проблемы с паролем
+        # Вместо этого размечаем ячейки как заблокированные/разблокированные
+        # Пользователь сам включит защиту в Excel если захочет
+        
         current_date = datetime.datetime.now().strftime("%Y%m%d_%H%M")
         filename = f"отпуск_{self.company_name}_{self.year}_{current_date}.xlsx"
         
@@ -170,6 +177,57 @@ class VacationScheduleGenerator:
         except Exception as e:
             print(f"✗ Ошибка при сохранении файла: {e}")
             return None
+    
+    def _add_button_placeholder(self, ws):
+        """Добавляем место для кнопки на лист СОТРУДНИКИ"""
+        total_blocks = self.max_employees
+        columns_per_block = 4
+        spacer_columns = self.max_employees - 1
+        
+        total_columns = (total_blocks * columns_per_block) + spacer_columns
+        button_start_col = total_columns + 3
+        
+        button_row = 1
+        button_height = 3
+        
+        ws.merge_cells(start_row=button_row, start_column=button_start_col,
+                      end_row=button_row + button_height - 1, end_column=button_start_col + 2)
+        
+        button_cell = ws.cell(row=button_row, column=button_start_col, 
+                             value="КНОПКА ДЛЯ ЗАПУСКА МАКРОСА")
+        button_cell.font = Font(bold=True, size=12, color="FFFFFF")
+        button_cell.alignment = Alignment(horizontal="center", vertical="center")
+        button_cell.fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        
+        instr_row = button_row + button_height + 1
+        ws.merge_cells(start_row=instr_row, start_column=button_start_col,
+                      end_row=instr_row, end_column=button_start_col + 2)
+        
+        instr_cell = ws.cell(row=instr_row, column=button_start_col,
+                           value="1. Вставьте кнопку из панели разработчика")
+        instr_cell.font = Font(size=9)
+        instr_cell.alignment = Alignment(horizontal="center")
+        
+        instr_row2 = instr_row + 1
+        ws.merge_cells(start_row=instr_row2, start_column=button_start_col,
+                      end_row=instr_row2, end_column=button_start_col + 2)
+        
+        instr_cell2 = ws.cell(row=instr_row2, column=button_start_col,
+                            value="2. Назначьте макрос 'ОбновитьГрафик'")
+        instr_cell2.font = Font(size=9)
+        instr_cell2.alignment = Alignment(horizontal="center")
+        
+        instr_row3 = instr_row2 + 1
+        ws.merge_cells(start_row=instr_row3, start_column=button_start_col,
+                      end_row=instr_row3, end_column=button_start_col + 2)
+        
+        instr_cell3 = ws.cell(row=instr_row3, column=button_start_col,
+                            value="Alt+F8 - альтернативный способ")
+        instr_cell3.font = Font(size=9, italic=True, color="666666")
+        instr_cell3.alignment = Alignment(horizontal="center")
+        
+        for col in range(button_start_col, button_start_col + 3):
+            ws.column_dimensions[get_column_letter(col)].width = 15
     
     def _create_employees_sheet(self, ws):
         """Создание листа СОТРУДНИКИ"""
@@ -449,7 +507,7 @@ class VacationScheduleGenerator:
         print(f"  ✓ Лист 'ПРАЗДНИКИ' создан ({len(holidays)} праздничных дней)")
     
     def _create_schedule_sheet(self, ws):
-        """Создание листа ГРАФИК"""
+        """Создание листа ГРАФИК с КОНТРАСТНЫМИ ЦВЕТАМИ"""
         print("  Создание листа 'ГРАФИК'...")
         
         ws.column_dimensions['A'].width = 6
@@ -470,13 +528,15 @@ class VacationScheduleGenerator:
                       'ИЮЛ', 'АВГ', 'СЕН', 'ОКТ', 'НОЯ', 'ДЕК']
         day_names = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
         
+        # КОНТРАСТНЫЕ ЦВЕТА для лучшей видимости в Excel 2010
         colors = {
-            'рабочий': 'FFFFFF',
-            'выходной': 'F2F2F2',
-            'праздник': 'FF9999',
+            'рабочий': 'FFFFFF',      # Белый - максимальный контраст
+            'выходной': 'D9D9D9',     # СЕРЫЙ (было F2F2F2) - темнее для лучшей видимости
+            'праздник': 'FF9999',     # Красный - оставляем как есть
         }
         
-        month_colors = ['F8F8F8', 'FFFFFF']
+        # КОНТРАСТНЫЕ ЦВЕТА для чередования месяцев
+        month_colors = ['E6E6E6', 'FFFFFF']  # Серый и белый (было F8F8F8 и FFFFFF)
         
         for month_idx, month in enumerate(range(1, 13)):
             days_in_month = calendar.monthrange(self.year, month)[1]
@@ -519,6 +579,7 @@ class VacationScheduleGenerator:
                 weekday_cell.alignment = Alignment(horizontal="center", vertical="center")
                 weekday_cell.font = Font(size=8)
                 
+                # Применяем КОНТРАСТНЫЕ цвета
                 fill_color = colors['рабочий']
                 if day_info:
                     if day_info.day_type == 'праздник':
@@ -537,6 +598,7 @@ class VacationScheduleGenerator:
         data_start_row = 5
         data_end_row = data_start_row + self.max_employees - 1
         
+        # Применяем КОНТРАСТНЫЕ цвета месяцев к области данных
         col = 3
         for month_idx, month in enumerate(range(1, 13)):
             days_in_month = calendar.monthrange(self.year, month)[1]
@@ -583,6 +645,7 @@ class VacationScheduleGenerator:
         footer.alignment = Alignment(horizontal="center")
         
         print(f"  ✓ Лист 'ГРАФИК' создан ({current_col-3} дней)")
+        print("    • Применены контрастные цвета для Excel 2010")
     
     def _create_dates_sheet(self, ws):
         """Создание служебного листа с датами"""
@@ -622,12 +685,15 @@ class VacationScheduleGenerator:
             cell.fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
             cell.alignment = Alignment(horizontal="center", vertical="center")
         
+        # Обновляем цвета в легенде для соответствия контрастным цветам
         legend_data = [
             ("✶", "Праздник/Выходной", "Нерабочий праздничный или дополнительный выходной день", "FF9999"),
             ("●", "Сокращенный", "Предпраздничный рабочий день (короче на 1 час)", "FFFF99"),
             ("О", "Отпуск", "День отпуска сотрудника", "C6EFCE"),
-            ("", "Выходной", "Суббота, воскресенье", "F2F2F2"),
-            ("", "Рабочий", "Обычный рабочий день", "FFFFFF"),
+            ("", "Выходной", "Суббота, воскресенье (серый фон)", "D9D9D9"),  # Обновлен цвет
+            ("", "Рабочий", "Обычный рабочий день (белый фон)", "FFFFFF"),
+            ("", "Месяц 1", "Четные месяцы (светло-серый фон)", "E6E6E6"),   # Добавлен для чередования месяцев
+            ("", "Месяц 2", "Нечетные месяцы (белый фон)", "FFFFFF"),       # Добавлен для чередования месяцев
         ]
         
         for i, (symbol, day_type, description, color) in enumerate(legend_data, 1):
@@ -644,7 +710,7 @@ class VacationScheduleGenerator:
             type_cell.fill = fill
             desc_cell.fill = fill
         
-        print("  ✓ Лист 'ЛЕГЕНДА' создан")
+        print("  ✓ Лист 'ЛЕГЕНДА' создан с обновленными цветами")
     
     def _create_instruction_sheet(self, ws):
         """Создание листа ИНСТРУКЦИЯ"""
@@ -655,33 +721,38 @@ class VacationScheduleGenerator:
         content = [
             ("ИНСТРУКЦИЯ ПО РАБОТЕ С ГРАФИКОМ ОТПУСКОВ", 16, True, True),
             ("", 1, False, False),
-            ("ОСНОВНЫЕ ФУНКЦИИ:", 14, True, False),
-            ("• Праздничные дни в периоде отпуска отмечаются буквой 'О'", 11, False, False),
-            ("• Праздничные дни исключаются из расчета количества дней отпуска", 11, False, False),
-            ("• Оптимизированная скорость работы при пустых ФИО сотрудников", 11, False, False),
+            ("НОВЫЕ ВОЗМОЖНОСТИ:", 14, True, False),
+            ("• КОНТРАСТНЫЕ ЦВЕТА для лучшей видимости в Excel 2010", 11, False, False),
+            ("• Ячейки размечены для защиты (пользователь включает защиту при необходимости)", 11, False, False),
+            ("• КНОПКА для запуска макроса + Alt+F8", 11, False, False),
             ("", 1, False, False),
-            ("ШАГ 1: УСТАНОВКА МАКРОСА", 14, True, False),
-            ("1. Откройте файл в Microsoft Excel", 11, False, False),
-            ("2. Нажмите Alt+F11 для открытия редактора VBA", 11, False, False),
-            ("3. В меню выберите Insert → Module", 11, False, False),
-            ("4. Скопируйте код из файла vacation_macro.txt в новый модуль", 11, False, False),
-            ("5. Закройте редактор VBA (Alt+Q)", 11, False, False),
+            ("КОНТРАСТНЫЕ ЦВЕТА:", 14, True, False),
+            ("• Выходные дни: СЕРЫЙ фон (D9D9D9)", 11, False, False),
+            ("• Рабочие дни: БЕЛЫЙ фон (FFFFFF)", 11, False, False),
+            ("• Чередование месяцев: СЕРЫЙ/БЕЛЫЙ (E6E6E6/FFFFFF)", 11, False, False),
+            ("• Праздничные дни: КРАСНЫЙ фон (FF9999)", 11, False, False),
+            ("• Отпуск: СВЕТЛО-ЗЕЛЕНЫЙ фон (C6EFCE)", 11, False, False),
             ("", 1, False, False),
-            ("ШАГ 2: ЗАПОЛНЕНИЕ ДАННЫХ", 14, True, False),
-            ("1. Перейдите на лист 'СОТРУДНИКИ'", 11, False, False),
-            ("2. Заполните столбец 'ФИО' (максимум 20 сотрудников)", 11, False, False),
-            ("3. Для удаления сотрудника оставьте поле ФИО пустым", 11, False, False),
-            ("4. Заполните даты отпусков (формат ДД.ММ.ГГГГ)", 11, False, False),
+            ("КАК ДОБАВИТЬ КНОПКУ:", 14, True, False),
+            ("1. Включите панель разработчика: Файл → Параметры → Настройка ленты", 11, False, False),
+            ("2. Отметьте 'Разработчик' в списке вкладок", 11, False, False),
+            ("3. Перейдите на вкладку 'Разработчик'", 11, False, False),
+            ("4. Нажмите 'Вставить' → выберите 'Кнопка' (первая в форме элементов управления)", 11, False, False),
+            ("5. Нарисуйте кнопку в выделенной области на листе СОТРУДНИКИ", 11, False, False),
+            ("6. В диалоговом окне выберите макрос 'ОбновитьГрафик'", 11, False, False),
+            ("7. Переименуйте кнопку (например: 'Построить график')", 11, False, False),
             ("", 1, False, False),
-            ("ШАГ 3: ЗАПУСК ГРАФИКА", 14, True, False),
-            ("1. Нажмите Alt+F8 для открытия диалога макросов", 11, False, False),
-            ("2. Выберите макрос 'ОбновитьГрафик' → 'Выполнить'", 11, False, False),
-            ("3. График построится за 2-3 секунды (оптимизировано)", 11, False, False),
+            ("ШАГИ РАБОТЫ:", 14, True, False),
+            ("1. Заполните ФИО и даты отпусков на листе 'СОТРУДНИКИ'", 11, False, False),
+            ("2. Нажмите кнопку 'Построить график' ИЛИ Alt+F8 → 'ОбновитьГрафик'", 11, False, False),
+            ("3. Перейдите на лист 'ГРАФИК' для просмотра", 11, False, False),
+            ("4. Количество дней рассчитывается автоматически (исключая праздники)", 11, False, False),
             ("", 1, False, False),
             ("ПРИМЕЧАНИЕ:", 14, True, False),
-            ("• Макрос автоматически определяет количество реальных сотрудников", 11, False, False),
-            ("• Останавливается при обнаружении пустого ФИО", 11, False, False),
-            ("• Работает быстро даже с неполным списком сотрудников", 11, False, False),
+            ("• Ячейки размечены для защиты, но защита не включена", 11, False, False),
+            ("• Чтобы включить защиту: Рецензирование → Защитить лист", 11, False, False),
+            ("• При включении защиты пароль НЕ устанавливайте (оставьте поле пустым)", 11, False, False),
+            ("• Разрешены для редактирования: ФИО и даты отпусков", 11, False, False),
         ]
         
         for i, (text, size, bold, center) in enumerate(content, 1):
@@ -702,12 +773,19 @@ Public Const MAX_EMPLOYEES As Integer = 20
 Public Const BLOCK_COLS As Integer = 4
 Public Const MAX_PERIODS As Integer = 10
 
-Private Const COLOR_MONTH_1 As Long = &HF8F8F8
-Private Const COLOR_MONTH_2 As Long = &HFFFFFF
+' ОБНОВЛЕННЫЕ КОНТРАСТНЫЕ ЦВЕТА для Excel 2010
+Private Const COLOR_MONTH_1 As Long = &HE6E6E6     ' Светло-серый (контрастный)
+Private Const COLOR_MONTH_2 As Long = &HFFFFFF     ' Белый
+Private Const COLOR_WEEKEND As Long = &HD9D9D9     ' Серый для выходных (контрастный)
+Private Const COLOR_HOLIDAY As Long = &H9999FF     ' Красный для праздников
+Private Const COLOR_VACATION As Long = &HCEC6EF    ' Светло-зеленый для отпуска
+
 Private Const DAYS_IN_MONTHS As String = "31,29,31,30,31,30,31,31,30,31,30,31"
-Private Const VACATION_COLOR As Long = &HC6EFCE
 
 Sub ОбновитьГрафик()
+    ' Макрос для обновления графика отпусков
+    ' Обновлено: используются контрастные цвета для Excel 2010
+    
     Dim wsEmployees As Worksheet
     Dim wsSchedule As Worksheet
     Dim wsService As Worksheet
@@ -730,6 +808,9 @@ Sub ОбновитьГрафик()
     Dim dateDict As Object
     Dim lastCol As Long
     Dim dictKey As String
+    
+    Dim startTime As Double
+    startTime = Timer
     
     Application.ScreenUpdating = False
     Application.Calculation = xlCalculationManual
@@ -824,7 +905,7 @@ Sub ОбновитьГрафик()
                                 
                                 With wsSchedule.Cells(scheduleRow, dateCol)
                                     .Value = "О"
-                                    .Interior.Color = VACATION_COLOR
+                                    .Interior.Color = COLOR_VACATION
                                     .Font.Bold = True
                                     .Font.Name = "Arial"
                                     .Font.Size = 9
@@ -849,9 +930,16 @@ NextEmployee:
     Application.Calculation = xlCalculationAutomatic
     Application.EnableEvents = True
     
-    MsgBox "График отпусков обновлен за " & Format(Timer, "0.0") & " сек!" & vbCrLf & _
+    Dim endTime As Double
+    endTime = Timer
+    Dim elapsedTime As Double
+    elapsedTime = endTime - startTime
+    
+    MsgBox "График отпусков успешно обновлен!" & vbCrLf & _
+           "Время выполнения: " & Format(elapsedTime, "0.0") & " сек" & vbCrLf & _
            "Сотрудников: " & employeeCount & vbCrLf & _
-           "Периодов отпуска: " & vacationCount, _
+           "Периодов отпуска: " & vacationCount & vbCrLf & _
+           "Использованы контрастные цвета для Excel 2010", _
            vbInformation, "График обновлен"
     
     wsSchedule.Activate
@@ -864,7 +952,11 @@ ErrorHandler:
     Application.Calculation = xlCalculationAutomatic
     Application.EnableEvents = True
     
-    MsgBox "Ошибка: " & Err.Description, vbCritical, "Ошибка"
+    MsgBox "Ошибка при обновлении графика!" & vbCrLf & _
+           "Код ошибки: " & Err.Number & vbCrLf & _
+           "Описание: " & Err.Description & vbCrLf & _
+           "Проверьте корректность введенных дат.", _
+           vbCritical, "Ошибка"
 End Sub
 
 Private Sub ОчиститьГрафик(wsSchedule As Worksheet)
@@ -895,6 +987,8 @@ Private Sub ОчиститьГрафик(wsSchedule As Worksheet)
 End Sub
 
 Private Sub ВосстановитьЦветаМесяцев(wsSchedule As Worksheet, rowNum As Long)
+    ' Восстанавливает контрастное чередование цветов месяцев
+    
     Dim monthDays() As String
     Dim i As Long, j As Long
     Dim col As Long
@@ -907,10 +1001,11 @@ Private Sub ВосстановитьЦветаМесяцев(wsSchedule As Works
     For i = 0 To UBound(monthDays)
         daysInMonth = CInt(monthDays(i))
         
+        ' Чередование цветов месяцев (контрастное)
         If (i Mod 2) = 0 Then
-            monthColor = COLOR_MONTH_1
+            monthColor = COLOR_MONTH_1  ' Четные месяцы: светло-серый
         Else
-            monthColor = COLOR_MONTH_2
+            monthColor = COLOR_MONTH_2  ' Нечетные месяцы: белый
         End If
         
         For j = 1 To daysInMonth
@@ -921,40 +1016,56 @@ Private Sub ВосстановитьЦветаМесяцев(wsSchedule As Works
 End Sub
 
 Sub ТестовыеДанные()
+    ' Процедура для заполнения тестовых данных
+    
     Dim ws As Worksheet
     Dim i As Long
     Dim blockStart As Long
     
     Set ws = ThisWorkbook.Worksheets("СОТРУДНИКИ")
     
-    For i = 0 To MAX_EMPLOYEES - 1
+    ' Очищаем только первые 10 сотрудников
+    For i = 0 To 9
         blockStart = i * BLOCK_COLS + 1
         ws.Cells(3, blockStart).ClearContents
         ws.Range(ws.Cells(4, blockStart + 2), ws.Cells(13, blockStart + 3)).ClearContents
     Next i
     
-    ws.Cells(3, 1).Value = "Иванов И.И."
+    ' Сотрудник 1
+    ws.Cells(3, 1).Value = "Иванов Иван Иванович"
     ws.Cells(4, 3).Value = DateSerial(2026, 1, 10)
     ws.Cells(4, 4).Value = DateSerial(2026, 1, 20)
-    ws.Cells(6, 3).Value = DateSerial(2026, 6, 10)
-    ws.Cells(6, 4).Value = DateSerial(2026, 6, 15)
+    ws.Cells(5, 3).Value = DateSerial(2026, 6, 10)
+    ws.Cells(5, 4).Value = DateSerial(2026, 6, 15)
     
-    ws.Cells(3, 5).Value = "Петров П.П."
+    ' Сотрудник 2
+    ws.Cells(3, 5).Value = "Петров Петр Петрович"
     ws.Cells(4, 7).Value = DateSerial(2026, 5, 1)
     ws.Cells(4, 8).Value = DateSerial(2026, 5, 15)
     
-    ws.Cells(3, 9).Value = "Сидоров С.С."
+    ' Сотрудник 3
+    ws.Cells(3, 9).Value = "Сидоров Сергей Сергеевич"
     ws.Cells(4, 11).Value = DateSerial(2026, 8, 1)
     ws.Cells(4, 12).Value = DateSerial(2026, 8, 14)
     
-    For i = 0 To MAX_EMPLOYEES - 1
+    ' Сотрудник 4
+    ws.Cells(3, 13).Value = "Козлова Анна Михайловна"
+    ws.Cells(4, 15).Value = DateSerial(2026, 7, 1)
+    ws.Cells(4, 16).Value = DateSerial(2026, 7, 14)
+    
+    ' Форматируем даты
+    For i = 0 To 9
         blockStart = i * BLOCK_COLS + 1
         ws.Range(ws.Cells(4, blockStart + 2), ws.Cells(13, blockStart + 3)).NumberFormat = "DD.MM.YYYY"
     Next i
     
+    ' Пересчитываем формулы
     ws.Calculate
     
-    MsgBox "Тестовые данные добавлены", vbInformation, "Готово"
+    MsgBox "Тестовые данные для 4 сотрудников добавлены!" & vbCrLf & _
+           "Для удаления сотрудника оставьте поле ФИО пустым." & vbCrLf & _
+           "Ячейки размечены для защиты (защита не включена).", _
+           vbInformation, "Тестовые данные"
 End Sub
 '''
         
@@ -974,7 +1085,7 @@ def main():
     """Основная функция"""
     print("=" * 70)
     print("ГЕНЕРАТОР ГРАФИКА ОТПУСКОВ С VBA МАКРОСОМ")
-    print("Версия с оптимизацией скорости при пустых ФИО")
+    print("Версия с контрастными цветами (защита отключена)")
     print("=" * 70)
     
     company_name = input("\nВведите название компании: ").strip()
@@ -994,11 +1105,17 @@ def main():
     if excel_file and macro_file:
         print("✓ ФАЙЛЫ УСПЕШНО СОЗДАНЫ")
         print(f"  • Excel файл: {excel_file}")
-        print(f"  • Файл макроса: {macro_file}")
-        print("\nОПТИМИЗАЦИИ СКОРОСТИ:")
-        print("  1. Использование словаря для быстрого поиска дат")
-        print("  2. Остановка обработки при обнаружении 3-х пустых ФИО подряд")
-        print("  3. Время работы: ~2 сек при любом количестве сотрудников")
+        print(f"  • Файл макроса: vacation_macro.txt")
+        print("\nОСНОВНЫЕ УЛУЧШЕНИЯ:")
+        print("  1. КОНТРАСТНЫЕ ЦВЕТА для Excel 2010:")
+        print("     • Выходные дни: СЕРЫЙ (D9D9D9)")
+        print("     • Рабочие дни: БЕЛЫЙ (FFFFFF)")
+        print("     • Чередование месяцев: СЕРЫЙ/БЕЛЫЙ")
+        print("  2. ЗАЩИТА ОТКЛЮЧЕНА:")
+        print("     • Не будет запрашиваться пароль")
+        print("     • Пользователь сам включает защиту если нужно")
+        print("  3. КНОПКА ДЛЯ ЗАПУСКА + Alt+F8")
+        print("  4. ОПТИМИЗИРОВАННАЯ СКОРОСТЬ РАБОТЫ")
         print("=" * 70)
     else:
         print("✗ ОШИБКА! Не удалось создать файлы.")

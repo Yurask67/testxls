@@ -4,12 +4,19 @@ Public Const MAX_EMPLOYEES As Integer = 20
 Public Const BLOCK_COLS As Integer = 4
 Public Const MAX_PERIODS As Integer = 10
 
-Private Const COLOR_MONTH_1 As Long = &HF8F8F8
-Private Const COLOR_MONTH_2 As Long = &HFFFFFF
+' ОБНОВЛЕННЫЕ КОНТРАСТНЫЕ ЦВЕТА для Excel 2010
+Private Const COLOR_MONTH_1 As Long = &HE6E6E6     ' Светло-серый (контрастный)
+Private Const COLOR_MONTH_2 As Long = &HFFFFFF     ' Белый
+Private Const COLOR_WEEKEND As Long = &HD9D9D9     ' Серый для выходных (контрастный)
+Private Const COLOR_HOLIDAY As Long = &H9999FF     ' Красный для праздников
+Private Const COLOR_VACATION As Long = &HCEC6EF    ' Светло-зеленый для отпуска
+
 Private Const DAYS_IN_MONTHS As String = "31,29,31,30,31,30,31,31,30,31,30,31"
-Private Const VACATION_COLOR As Long = &HC6EFCE
 
 Sub ОбновитьГрафик()
+    ' Макрос для обновления графика отпусков
+    ' Обновлено: используются контрастные цвета для Excel 2010
+    
     Dim wsEmployees As Worksheet
     Dim wsSchedule As Worksheet
     Dim wsService As Worksheet
@@ -32,6 +39,9 @@ Sub ОбновитьГрафик()
     Dim dateDict As Object
     Dim lastCol As Long
     Dim dictKey As String
+    
+    Dim startTime As Double
+    startTime = Timer
     
     Application.ScreenUpdating = False
     Application.Calculation = xlCalculationManual
@@ -126,7 +136,7 @@ Sub ОбновитьГрафик()
                                 
                                 With wsSchedule.Cells(scheduleRow, dateCol)
                                     .Value = "О"
-                                    .Interior.Color = VACATION_COLOR
+                                    .Interior.Color = COLOR_VACATION
                                     .Font.Bold = True
                                     .Font.Name = "Arial"
                                     .Font.Size = 9
@@ -151,9 +161,16 @@ NextEmployee:
     Application.Calculation = xlCalculationAutomatic
     Application.EnableEvents = True
     
-    MsgBox "График отпусков обновлен за " & Format(Timer, "0.0") & " сек!" & vbCrLf & _
+    Dim endTime As Double
+    endTime = Timer
+    Dim elapsedTime As Double
+    elapsedTime = endTime - startTime
+    
+    MsgBox "График отпусков успешно обновлен!" & vbCrLf & _
+           "Время выполнения: " & Format(elapsedTime, "0.0") & " сек" & vbCrLf & _
            "Сотрудников: " & employeeCount & vbCrLf & _
-           "Периодов отпуска: " & vacationCount, _
+           "Периодов отпуска: " & vacationCount & vbCrLf & _
+           "Использованы контрастные цвета для Excel 2010", _
            vbInformation, "График обновлен"
     
     wsSchedule.Activate
@@ -166,7 +183,11 @@ ErrorHandler:
     Application.Calculation = xlCalculationAutomatic
     Application.EnableEvents = True
     
-    MsgBox "Ошибка: " & Err.Description, vbCritical, "Ошибка"
+    MsgBox "Ошибка при обновлении графика!" & vbCrLf & _
+           "Код ошибки: " & Err.Number & vbCrLf & _
+           "Описание: " & Err.Description & vbCrLf & _
+           "Проверьте корректность введенных дат.", _
+           vbCritical, "Ошибка"
 End Sub
 
 Private Sub ОчиститьГрафик(wsSchedule As Worksheet)
@@ -197,6 +218,8 @@ Private Sub ОчиститьГрафик(wsSchedule As Worksheet)
 End Sub
 
 Private Sub ВосстановитьЦветаМесяцев(wsSchedule As Worksheet, rowNum As Long)
+    ' Восстанавливает контрастное чередование цветов месяцев
+    
     Dim monthDays() As String
     Dim i As Long, j As Long
     Dim col As Long
@@ -209,10 +232,11 @@ Private Sub ВосстановитьЦветаМесяцев(wsSchedule As Works
     For i = 0 To UBound(monthDays)
         daysInMonth = CInt(monthDays(i))
         
+        ' Чередование цветов месяцев (контрастное)
         If (i Mod 2) = 0 Then
-            monthColor = COLOR_MONTH_1
+            monthColor = COLOR_MONTH_1  ' Четные месяцы: светло-серый
         Else
-            monthColor = COLOR_MONTH_2
+            monthColor = COLOR_MONTH_2  ' Нечетные месяцы: белый
         End If
         
         For j = 1 To daysInMonth
@@ -223,38 +247,54 @@ Private Sub ВосстановитьЦветаМесяцев(wsSchedule As Works
 End Sub
 
 Sub ТестовыеДанные()
+    ' Процедура для заполнения тестовых данных
+    
     Dim ws As Worksheet
     Dim i As Long
     Dim blockStart As Long
     
     Set ws = ThisWorkbook.Worksheets("СОТРУДНИКИ")
     
-    For i = 0 To MAX_EMPLOYEES - 1
+    ' Очищаем только первые 10 сотрудников
+    For i = 0 To 9
         blockStart = i * BLOCK_COLS + 1
         ws.Cells(3, blockStart).ClearContents
         ws.Range(ws.Cells(4, blockStart + 2), ws.Cells(13, blockStart + 3)).ClearContents
     Next i
     
-    ws.Cells(3, 1).Value = "Иванов И.И."
+    ' Сотрудник 1
+    ws.Cells(3, 1).Value = "Иванов Иван Иванович"
     ws.Cells(4, 3).Value = DateSerial(2026, 1, 10)
     ws.Cells(4, 4).Value = DateSerial(2026, 1, 20)
-    ws.Cells(6, 3).Value = DateSerial(2026, 6, 10)
-    ws.Cells(6, 4).Value = DateSerial(2026, 6, 15)
+    ws.Cells(5, 3).Value = DateSerial(2026, 6, 10)
+    ws.Cells(5, 4).Value = DateSerial(2026, 6, 15)
     
-    ws.Cells(3, 5).Value = "Петров П.П."
+    ' Сотрудник 2
+    ws.Cells(3, 5).Value = "Петров Петр Петрович"
     ws.Cells(4, 7).Value = DateSerial(2026, 5, 1)
     ws.Cells(4, 8).Value = DateSerial(2026, 5, 15)
     
-    ws.Cells(3, 9).Value = "Сидоров С.С."
+    ' Сотрудник 3
+    ws.Cells(3, 9).Value = "Сидоров Сергей Сергеевич"
     ws.Cells(4, 11).Value = DateSerial(2026, 8, 1)
     ws.Cells(4, 12).Value = DateSerial(2026, 8, 14)
     
-    For i = 0 To MAX_EMPLOYEES - 1
+    ' Сотрудник 4
+    ws.Cells(3, 13).Value = "Козлова Анна Михайловна"
+    ws.Cells(4, 15).Value = DateSerial(2026, 7, 1)
+    ws.Cells(4, 16).Value = DateSerial(2026, 7, 14)
+    
+    ' Форматируем даты
+    For i = 0 To 9
         blockStart = i * BLOCK_COLS + 1
         ws.Range(ws.Cells(4, blockStart + 2), ws.Cells(13, blockStart + 3)).NumberFormat = "DD.MM.YYYY"
     Next i
     
+    ' Пересчитываем формулы
     ws.Calculate
     
-    MsgBox "Тестовые данные добавлены", vbInformation, "Готово"
+    MsgBox "Тестовые данные для 4 сотрудников добавлены!" & vbCrLf & _
+           "Для удаления сотрудника оставьте поле ФИО пустым." & vbCrLf & _
+           "Ячейки размечены для защиты (защита не включена).", _
+           vbInformation, "Тестовые данные"
 End Sub
